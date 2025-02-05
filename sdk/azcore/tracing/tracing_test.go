@@ -32,6 +32,8 @@ func TestProviderZeroValues(t *testing.T) {
 
 func TestProvider(t *testing.T) {
 	var addEventCalled bool
+	var addLinkCalled bool
+	var spanContextCalled bool
 	var endCalled bool
 	var setAttributesCalled bool
 	var setStatusCalled bool
@@ -40,7 +42,12 @@ func TestProvider(t *testing.T) {
 	pr := NewProvider(func(name, version string) Tracer {
 		return NewTracer(func(context.Context, string, *SpanOptions) (context.Context, Span) {
 			return nil, NewSpan(SpanImpl{
-				AddEvent:      func(string, ...Attribute) { addEventCalled = true },
+				AddEvent: func(string, ...Attribute) { addEventCalled = true },
+				AddLink:  func(link Link) { addLinkCalled = true },
+				SpanContext: func() SpanContext {
+					spanContextCalled = true
+					return struct{ SpanContext }{}
+				},
 				End:           func() { endCalled = true },
 				SetAttributes: func(...Attribute) { setAttributesCalled = true },
 				SetStatus:     func(SpanStatus, string) { setStatusCalled = true },
@@ -67,10 +74,17 @@ func TestProvider(t *testing.T) {
 	require.NotZero(t, sp)
 
 	sp.AddEvent("event")
+
+	sp.AddLink(Link{})
+	sc := sp.SpanContext()
+	require.NotNil(t, sc)
+
 	sp.End()
 	sp.SetAttributes()
 	sp.SetStatus(SpanStatusError, "desc")
 	require.True(t, addEventCalled)
+	require.True(t, addLinkCalled)
+	require.True(t, spanContextCalled)
 	require.True(t, endCalled)
 	require.True(t, setAttributesCalled)
 	require.True(t, setStatusCalled)
