@@ -65,6 +65,7 @@ func NewTracer(newSpanFn func(ctx context.Context, spanName string, options *Spa
 // Tracer is the factory that creates Span instances.
 type Tracer struct {
 	attrs             []Attribute
+	links             []Link
 	newSpanFn         func(ctx context.Context, spanName string, options *SpanOptions) (context.Context, Span)
 	spanFromContextFn func(ctx context.Context) Span
 }
@@ -113,6 +114,9 @@ type SpanOptions struct {
 
 	// Attributes contains key-value pairs of attributes for the span.
 	Attributes []Attribute
+
+	// Links contains the links to other spans.
+	Links []Link
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,6 +133,13 @@ type SpanImpl struct {
 
 	// AddEvent contains the implementation for the Span.AddEvent method.
 	AddEvent func(string, ...Attribute)
+
+	// AddLink contains the implementation for the Span.AddLink method.
+	AddLink func(Link)
+
+	// SpanContext returns the SpanContext of the Span. The returned SpanContext
+	// is usable even after the End method has been called for the Span.
+	SpanContext func() SpanContext
 
 	// SetStatus contains the implementation for the Span.SetStatus method.
 	SetStatus func(SpanStatus, string)
@@ -170,6 +181,21 @@ func (s Span) AddEvent(name string, attrs ...Attribute) {
 	}
 }
 
+// AddLink adds a link to the span.
+func (s Span) AddLink(link Link) {
+	if s.impl.AddLink != nil {
+		s.impl.AddLink(link)
+	}
+}
+
+// SpanContext returns the SpanContext of the Span.
+func (s Span) SpanContext() SpanContext {
+	if s.impl.SpanContext != nil {
+		return s.impl.SpanContext()
+	}
+	return nil
+}
+
 // SetStatus sets the status on the span along with a description.
 func (s Span) SetStatus(code SpanStatus, desc string) {
 	if s.impl.SetStatus != nil {
@@ -188,4 +214,42 @@ type Attribute struct {
 	// Types that are natively supported include int64, float64, int, bool, string.
 	// Any other type will be formatted per rules of fmt.Sprintf("%v").
 	Value any
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type Link struct {
+	// SpanContext of the linked Span.
+	SpanContext SpanContext
+
+	// Attributes describe the aspects of the link.
+	Attributes []Attribute
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// SpanID is a unique identity of a span in a trace.
+type SpanID [8]byte
+
+// TraceID is a unique identity of a trace.
+type TraceID [16]byte
+
+// TraceFlags contains flags that can be set on a SpanContext.
+type TraceFlags byte
+
+type TraceState interface {
+	String() string
+}
+
+type SpanContext interface {
+	// IsRemote indicates whether the SpanContext represents a remotely-created Span.
+	IsRemote() bool
+	// SpanID returns the SpanID from the SpanContext.
+	SpanID() SpanID
+	// TraceID returns the TraceID from the SpanContext.
+	TraceID() TraceID
+	// TraceFlags returns the TraceFlags from the SpanContext.
+	TraceFlags() TraceFlags
+	// TraceState returns the TraceState from the SpanContext.
+	TraceState() TraceState
 }

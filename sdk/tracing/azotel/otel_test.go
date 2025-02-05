@@ -169,6 +169,66 @@ func TestConvertAttributes(t *testing.T) {
 	}
 }
 
+func TestConvertLinks(t *testing.T) {
+	attr := tracing.Attribute{
+		Key:   "key",
+		Value: "value",
+	}
+	spanContext := &testSpanContext{
+		traceID:    tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8},
+		spanID:     tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
+		traceFlags: tracing.TraceFlags(0x1),
+		traceState: &testTraceState{inner: "key1=val1,key2=val2"},
+		remote:     true,
+	}
+
+	links := convertLinks([]tracing.Link{
+		{
+			SpanContext: spanContext,
+		},
+		{
+			Attributes: []tracing.Attribute{attr},
+		},
+		{
+			SpanContext: spanContext,
+			Attributes:  []tracing.Attribute{attr},
+		},
+	})
+	require.Len(t, links, 3)
+	require.NotNil(t, links[0].SpanContext)
+	require.True(t, links[0].SpanContext.IsRemote())
+	require.Len(t, links[0].Attributes, 0)
+
+	require.NotNil(t, links[1].SpanContext)
+	require.False(t, links[1].SpanContext.IsRemote())
+	require.Len(t, links[1].Attributes, 1)
+
+	require.NotNil(t, links[2].SpanContext)
+	require.True(t, links[2].SpanContext.IsRemote())
+	require.Len(t, links[2].Attributes, 1)
+}
+
+func TestConvertSpanContext(t *testing.T) {
+	traceID := tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8}
+	spanID := tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8}
+	traceFlags := tracing.TraceFlags(0x1)
+	traceState := &testTraceState{inner: "key1=val1,key2=val2"}
+	spanContext := &testSpanContext{
+		traceID:    traceID,
+		spanID:     spanID,
+		traceFlags: traceFlags,
+		traceState: traceState,
+		remote:     true,
+	}
+
+	otelSpanContext := convertSpanContext(spanContext)
+	assert.EqualValues(t, traceID, otelSpanContext.TraceID())
+	assert.EqualValues(t, spanID, otelSpanContext.SpanID())
+	assert.EqualValues(t, traceFlags, otelSpanContext.TraceFlags())
+	assert.EqualValues(t, traceState.String(), otelSpanContext.TraceState().String())
+	assert.True(t, otelSpanContext.IsRemote())
+}
+
 func TestConvertSpanKind(t *testing.T) {
 	assert.EqualValues(t, trace.SpanKindClient, convertSpanKind(tracing.SpanKindClient))
 	assert.EqualValues(t, trace.SpanKindConsumer, convertSpanKind(tracing.SpanKindConsumer))
@@ -258,4 +318,40 @@ func (ts *testSpan) SetAttributes(kv ...attribute.KeyValue) {
 func (ts *testSpan) TracerProvider() trace.TracerProvider {
 	ts.t.Fatal("TracerProvider not required")
 	return nil
+}
+
+type testSpanContext struct {
+	traceID    tracing.TraceID
+	spanID     tracing.SpanID
+	traceFlags tracing.TraceFlags
+	traceState tracing.TraceState
+	remote     bool
+}
+
+func (tsc *testSpanContext) TraceID() tracing.TraceID {
+	return tsc.traceID
+}
+
+func (tsc *testSpanContext) SpanID() tracing.SpanID {
+	return tsc.spanID
+}
+
+func (tsc *testSpanContext) TraceFlags() tracing.TraceFlags {
+	return tsc.traceFlags
+}
+
+func (tsc *testSpanContext) TraceState() tracing.TraceState {
+	return tsc.traceState
+}
+
+func (tsc *testSpanContext) IsRemote() bool {
+	return tsc.remote
+}
+
+type testTraceState struct {
+	inner string
+}
+
+func (ts *testTraceState) String() string {
+	return ts.inner
 }

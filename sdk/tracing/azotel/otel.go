@@ -33,11 +33,13 @@ func NewTracingProvider(tracerProvider trace.TracerProvider, opts *TracingProvid
 		return tracing.NewTracer(func(ctx context.Context, spanName string, options *tracing.SpanOptions) (context.Context, tracing.Span) {
 			kind := tracing.SpanKindInternal
 			var attrs []attribute.KeyValue
+			var links []trace.Link
 			if options != nil {
 				kind = options.Kind
 				attrs = convertAttributes(options.Attributes)
+				links = convertLinks(options.Links)
 			}
-			ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(convertSpanKind(kind)), trace.WithAttributes(attrs...))
+			ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(convertSpanKind(kind)), trace.WithAttributes(attrs...), trace.WithLinks(links...))
 			return ctx, convertSpan(span)
 		}, &tracing.TracerOptions{
 			SpanFromContext: func(ctx context.Context) tracing.Span {
@@ -85,6 +87,31 @@ func convertAttributes(attrs []tracing.Attribute) []attribute.KeyValue {
 		}
 	}
 	return keyvals
+}
+
+func convertLinks(links []tracing.Link) []trace.Link {
+	var otelLinks []trace.Link
+	for _, link := range links {
+		otelLinks = append(otelLinks, trace.Link{
+			SpanContext: convertSpanContext(link.SpanContext),
+			Attributes:  convertAttributes(link.Attributes),
+		})
+	}
+	return otelLinks
+}
+
+func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
+	if spanContext == nil {
+		return trace.SpanContext{}
+	}
+	traceState, _ := trace.ParseTraceState(spanContext.TraceState().String())
+	return trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID(spanContext.TraceID()),
+		SpanID:     trace.SpanID(spanContext.SpanID()),
+		TraceFlags: trace.TraceFlags(spanContext.TraceFlags()),
+		TraceState: traceState,
+		Remote:     spanContext.IsRemote(),
+	})
 }
 
 func convertSpanKind(sk tracing.SpanKind) trace.SpanKind {
