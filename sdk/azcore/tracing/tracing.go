@@ -19,16 +19,18 @@ type ProviderOptions struct {
 // NewProvider creates a new Provider with the specified values.
 //   - newTracerFn is the underlying implementation for creating Tracer instances
 //   - options contains optional values; pass nil to accept the default value
-func NewProvider(newTracerFn func(name, version string) Tracer, options *ProviderOptions) Provider {
+func NewProvider(newTracerFn func(name, version string) Tracer, newPropagatorFn func() Propagator, options *ProviderOptions) Provider {
 	return Provider{
-		newTracerFn: newTracerFn,
+		newTracerFn:     newTracerFn,
+		newPropagatorFn: newPropagatorFn,
 	}
 }
 
-// Provider is the factory that creates Tracer instances.
+// Provider is the factory that creates Tracer and Propagator instances.
 // It defaults to a no-op provider.
 type Provider struct {
-	newTracerFn func(name, version string) Tracer
+	newTracerFn     func(name, version string) Tracer
+	newPropagatorFn func() Propagator
 }
 
 // NewTracer creates a new Tracer for the specified module name and version.
@@ -39,6 +41,14 @@ func (p Provider) NewTracer(module, version string) (tracer Tracer) {
 		tracer = p.newTracerFn(module, version)
 	}
 	return
+}
+
+// NewPropagator creates a new Propagator.
+func (p Provider) NewPropagator() Propagator {
+	if p.newPropagatorFn != nil {
+		return p.newPropagatorFn()
+	}
+	return Propagator{}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -193,7 +203,7 @@ func (s Span) SpanContext() SpanContext {
 	if s.impl.SpanContext != nil {
 		return s.impl.SpanContext()
 	}
-	return nil
+	return SpanContext{}
 }
 
 // SetStatus sets the status on the span along with a description.
@@ -241,15 +251,107 @@ type TraceState interface {
 	String() string
 }
 
-type SpanContext interface {
-	// IsRemote indicates whether the SpanContext represents a remotely-created Span.
-	IsRemote() bool
-	// SpanID returns the SpanID from the SpanContext.
-	SpanID() SpanID
-	// TraceID returns the TraceID from the SpanContext.
-	TraceID() TraceID
-	// TraceFlags returns the TraceFlags from the SpanContext.
-	TraceFlags() TraceFlags
-	// TraceState returns the TraceState from the SpanContext.
-	TraceState() TraceState
+type SpanContext struct {
+	spanID     SpanID
+	traceID    TraceID
+	traceFlags TraceFlags
+	traceState TraceState
+	remote     bool
+}
+
+func (sc SpanContext) SpanID() SpanID {
+	return sc.spanID
+}
+
+func (sc SpanContext) TraceID() TraceID {
+	return sc.traceID
+}
+
+func (sc SpanContext) TraceFlags() TraceFlags {
+	return sc.traceFlags
+}
+
+func (sc SpanContext) TraceState() TraceState {
+	return sc.traceState
+}
+
+func (sc SpanContext) IsRemote() bool {
+	return sc.remote
+}
+
+// SpanContextConfig contains mutable fields usable for constructing
+// an immutable SpanContext.
+type SpanContextConfig struct {
+	TraceID    TraceID
+	SpanID     SpanID
+	TraceFlags TraceFlags
+	TraceState TraceState
+	Remote     bool
+}
+
+// NewSpanContext constructs a SpanContext using values from the provided
+// SpanContextConfig.
+func NewSpanContext(config SpanContextConfig) SpanContext {
+	return SpanContext{
+		traceID:    config.TraceID,
+		spanID:     config.SpanID,
+		traceFlags: config.TraceFlags,
+		traceState: config.TraceState,
+		remote:     config.Remote,
+	}
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type Propagator struct {
+	impl PropagatorImpl
+}
+
+// Inject injects the span context into the carrier.
+func (p Propagator) Inject(ctx context.Context, carrier Carrier) {
+	if p.impl.Inject != nil {
+		p.impl.Inject(ctx, carrier)
+	}
+}
+
+// Extract extracts the span context from the carrier.
+func (p Propagator) Extract(ctx context.Context, carrier Carrier) context.Context {
+	if p.impl.Extract != nil {
+		return p.impl.Extract(ctx, carrier)
+	}
+	return ctx
+}
+
+// Fields returns the fields that the propagator can inject and extract.
+func (p Propagator) Fields() []string {
+	if p.impl.Fields != nil {
+		return p.impl.Fields()
+	}
+	return nil
+}
+
+func NewPropagator(impl PropagatorImpl) Propagator {
+	return Propagator{
+		impl: impl,
+	}
+}
+
+type PropagatorImpl struct {
+	// Inject contains the implementation for the Propagator.Inject method.
+	Inject func(ctx context.Context, carrier Carrier)
+	// Extract contains the implementation for the Propagator.Extract method.
+	Extract func(ctx context.Context, carrier Carrier) context.Context
+	// Fields contains the implementation for the Propagator.Fields method.
+	Fields func() []string
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type Carrier interface {
+	// Get returns the value associated with the passed key.
+	Get(key string) string
+	// Set stores the key-value pair.
+	Set(key string, value string)
+	// Keys lists the keys stored in this carrier.
+	Keys() []string
 }

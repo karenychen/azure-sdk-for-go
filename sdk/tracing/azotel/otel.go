@@ -14,6 +14,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -47,6 +48,8 @@ func NewTracingProvider(tracerProvider trace.TracerProvider, opts *TracingProvid
 			},
 		})
 
+	}, func() tracing.Propagator {
+		return convertPropagator(propagation.TraceContext{})
 	}, nil)
 }
 
@@ -101,15 +104,16 @@ func convertLinks(links []tracing.Link) []trace.Link {
 }
 
 func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
-	if spanContext == nil {
-		return trace.SpanContext{}
+	var ts string
+	if spanContext.TraceState() != nil {
+		ts = spanContext.TraceState().String()
 	}
-	traceState, _ := trace.ParseTraceState(spanContext.TraceState().String())
+	otelTraceState, _ := trace.ParseTraceState(ts)
 	return trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(spanContext.TraceID()),
 		SpanID:     trace.SpanID(spanContext.SpanID()),
 		TraceFlags: trace.TraceFlags(spanContext.TraceFlags()),
-		TraceState: traceState,
+		TraceState: otelTraceState,
 		Remote:     spanContext.IsRemote(),
 	})
 }
@@ -138,4 +142,18 @@ func convertStatus(ss tracing.SpanStatus) codes.Code {
 	default:
 		return codes.Unset
 	}
+}
+
+func convertPropagator(pr propagation.TextMapPropagator) tracing.Propagator {
+	return tracing.NewPropagator(tracing.PropagatorImpl{
+		Inject: func(ctx context.Context, carrier tracing.Carrier) {
+			pr.Inject(ctx, carrier)
+		},
+		Extract: func(ctx context.Context, carrier tracing.Carrier) context.Context {
+			return pr.Extract(ctx, carrier)
+		},
+		Fields: func() []string {
+			return pr.Fields()
+		},
+	})
 }

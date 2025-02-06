@@ -38,6 +38,9 @@ func TestProvider(t *testing.T) {
 	var setAttributesCalled bool
 	var setStatusCalled bool
 	var spanFromContextCalled bool
+	var injectCalled bool
+	var extractCalled bool
+	var fieldsCalled bool
 
 	pr := NewProvider(func(name, version string) Tracer {
 		return NewTracer(func(context.Context, string, *SpanOptions) (context.Context, Span) {
@@ -46,7 +49,7 @@ func TestProvider(t *testing.T) {
 				AddLink:  func(link Link) { addLinkCalled = true },
 				SpanContext: func() SpanContext {
 					spanContextCalled = true
-					return struct{ SpanContext }{}
+					return SpanContext{}
 				},
 				End:           func() { endCalled = true },
 				SetAttributes: func(...Attribute) { setAttributesCalled = true },
@@ -58,6 +61,20 @@ func TestProvider(t *testing.T) {
 				return Span{}
 			},
 		})
+	}, func() Propagator {
+		return Propagator{
+			PropagatorImpl{
+				Inject: func(context.Context, Carrier) { injectCalled = true },
+				Extract: func(context.Context, Carrier) context.Context {
+					extractCalled = true
+					return context.Background()
+				},
+				Fields: func() []string {
+					fieldsCalled = true
+					return nil
+				},
+			},
+		}
 	}, nil)
 	tr := pr.NewTracer("name", "version")
 	require.NotZero(t, tr)
@@ -78,6 +95,11 @@ func TestProvider(t *testing.T) {
 	sp.AddLink(Link{})
 	sc := sp.SpanContext()
 	require.NotNil(t, sc)
+	require.Zero(t, sc.TraceID())
+	require.Zero(t, sc.SpanID())
+	require.Zero(t, sc.TraceFlags())
+	require.Nil(t, sc.TraceState())
+	require.False(t, sc.IsRemote())
 
 	sp.End()
 	sp.SetAttributes()
@@ -89,4 +111,12 @@ func TestProvider(t *testing.T) {
 	require.True(t, setAttributesCalled)
 	require.True(t, setStatusCalled)
 	require.True(t, spanFromContextCalled)
+
+	pp := pr.NewPropagator()
+	pp.Inject(context.Background(), nil)
+	pp.Extract(context.Background(), nil)
+	pp.Fields()
+	require.True(t, injectCalled)
+	require.True(t, extractCalled)
+	require.True(t, fieldsCalled)
 }
