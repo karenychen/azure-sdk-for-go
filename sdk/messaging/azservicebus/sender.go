@@ -19,6 +19,7 @@ type (
 	// Sender is used to send messages as well as schedule them to be delivered at a later date.
 	Sender struct {
 		tracer         tracing.Tracer
+		propagator     tracing.Propagator
 		queueOrTopic   string
 		cleanupOnClose func()
 		links          internal.AMQPLinks
@@ -95,7 +96,7 @@ type SendMessageBatchOptions struct {
 // Message batches can be created using [Sender.NewMessageBatch].
 // If the operation fails it can return an [*azservicebus.Error] type if the failure is actionable.
 func (s *Sender) SendMessageBatch(ctx context.Context, batch *MessageBatch, options *SendMessageBatchOptions) error {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   s.tracer,
 		SpanName: tracing.SendBatchSpanName,
 		Attributes: append(
@@ -140,7 +141,7 @@ func (s *Sender) ScheduleAMQPAnnotatedMessages(ctx context.Context, messages []*
 }
 
 func scheduleMessages[T amqpCompatibleMessage](ctx context.Context, tracer tracing.Tracer, links internal.AMQPLinks, retryOptions RetryOptions, messages []T, scheduledEnqueueTime time.Time) ([]int64, error) {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   tracer,
 		SpanName: tracing.ScheduleSpanName,
 		Attributes: append(
@@ -179,7 +180,7 @@ type CancelScheduledMessagesOptions struct {
 // CancelScheduledMessages cancels multiple messages that were scheduled.
 // If the operation fails it can return an [*azservicebus.Error] type if the failure is actionable.
 func (s *Sender) CancelScheduledMessages(ctx context.Context, sequenceNumbers []int64, options *CancelScheduledMessagesOptions) error {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   s.tracer,
 		SpanName: tracing.CancelScheduledSpanName,
 		Attributes: append(
@@ -201,7 +202,7 @@ func (s *Sender) Close(ctx context.Context) error {
 }
 
 func (s *Sender) sendMessage(ctx context.Context, message amqpCompatibleMessage) error {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   s.tracer,
 		SpanName: tracing.SendSpanName,
 		Attributes: append(
@@ -210,7 +211,9 @@ func (s *Sender) sendMessage(ctx context.Context, message amqpCompatibleMessage)
 	}
 
 	err := s.links.Retry(ctx, EventSender, "SendMessage", func(ctx context.Context, lwid *internal.LinksWithID, args *utils.RetryFnArgs) error {
-		return lwid.Sender.Send(ctx, message.toAMQPMessage(), nil)
+		msg := message.toAMQPMessage()
+		tracing.Inject(ctx, s.propagator, msg)
+		return lwid.Sender.Send(ctx, msg, nil)
 	}, RetryOptions(s.retryOptions), to)
 
 	if amqpErr := (*amqp.Error)(nil); errors.As(err, &amqpErr) && amqpErr.Condition == amqp.ErrCondMessageSizeExceeded {
@@ -238,6 +241,7 @@ func (sender *Sender) createSenderLink(ctx context.Context, session amqpwrap.AMQ
 
 type newSenderArgs struct {
 	tracer         tracing.Tracer
+	propagator     tracing.Propagator
 	ns             internal.NamespaceForAMQPLinks
 	queueOrTopic   string
 	cleanupOnClose func()
@@ -251,6 +255,7 @@ func newSender(args newSenderArgs) (*Sender, error) {
 
 	sender := &Sender{
 		tracer:         args.tracer,
+		propagator:     args.propagator,
 		queueOrTopic:   args.queueOrTopic,
 		cleanupOnClose: args.cleanupOnClose,
 		retryOptions:   args.retryOptions,

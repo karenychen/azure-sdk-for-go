@@ -46,6 +46,7 @@ const (
 // Receiver receives messages using pull based functions (ReceiveMessages).
 type Receiver struct {
 	tracer                   tracing.Tracer
+	propagator               tracing.Propagator
 	amqpLinks                internal.AMQPLinks
 	cancelReleaser           *atomic.Value
 	cleanupOnClose           func()
@@ -114,6 +115,7 @@ func applyReceiverOptions(receiver *Receiver, entity *entity, options *ReceiverO
 
 type newReceiverArgs struct {
 	tracer              tracing.Tracer
+	propagator          tracing.Propagator
 	ns                  internal.NamespaceForAMQPLinks
 	entity              entity
 	cleanupOnClose      func()
@@ -133,6 +135,7 @@ func newReceiver(args newReceiverArgs, options *ReceiverOptions) (*Receiver, err
 
 	receiver := &Receiver{
 		tracer:                   args.tracer,
+		propagator:               args.propagator,
 		cancelReleaser:           &atomic.Value{},
 		cleanupOnClose:           args.cleanupOnClose,
 		lastPeekedSequenceNumber: 0,
@@ -210,7 +213,7 @@ func (r *Receiver) ReceiveMessages(ctx context.Context, maxMessages int, options
 	}
 
 	var err error
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   r.tracer,
 		SpanName: tracing.ReceiveSpanName,
 		Attributes: append(
@@ -233,7 +236,7 @@ type ReceiveDeferredMessagesOptions struct {
 // ReceiveDeferredMessages receives messages that were deferred using `Receiver.DeferMessage`.
 // If the operation fails it can return an [*azservicebus.Error] type if the failure is actionable.
 func (r *Receiver) ReceiveDeferredMessages(ctx context.Context, sequenceNumbers []int64, options *ReceiveDeferredMessagesOptions) ([]*ReceivedMessage, error) {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   r.tracer,
 		SpanName: tracing.ReceiveDeferredSpanName,
 		Attributes: append(
@@ -283,7 +286,7 @@ type PeekMessagesOptions struct {
 //
 // For more information about peeking/message-browsing see https://aka.ms/azsdk/servicebus/message-browsing
 func (r *Receiver) PeekMessages(ctx context.Context, maxMessageCount int, options *PeekMessagesOptions) ([]*ReceivedMessage, error) {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   r.tracer,
 		SpanName: tracing.PeekSpanName,
 		Attributes: append(
@@ -333,7 +336,7 @@ type RenewMessageLockOptions struct {
 // RenewMessageLock renews the lock on a message, updating the `LockedUntil` field on `msg`.
 // If the operation fails it can return an [*azservicebus.Error] type if the failure is actionable.
 func (r *Receiver) RenewMessageLock(ctx context.Context, msg *ReceivedMessage, options *RenewMessageLockOptions) error {
-	to := &tracing.TracerOptions{
+	to := &tracing.StartSpanOptions{
 		Tracer:   r.tracer,
 		SpanName: tracing.RenewMessageLockSpanName,
 		Attributes: append(
@@ -488,6 +491,9 @@ func (r *Receiver) receiveMessagesImpl(ctx context.Context, maxMessages int, opt
 	var receivedMessages []*ReceivedMessage
 
 	for _, msg := range result.Messages {
+		span := r.tracer.SpanFromContext(ctx)
+		span.AddLink(r.tracer.LinkFromContext(tracing.Extract(context.Background(), r.propagator, msg),
+			tracing.Attribute{Key: tracing.MessageID, Value: msg.Properties.MessageID}))
 		receivedMessages = append(receivedMessages, newReceivedMessage(msg, linksWithID.Receiver))
 	}
 

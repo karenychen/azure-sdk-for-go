@@ -12,17 +12,17 @@ import (
 )
 
 func TestStartSpan(t *testing.T) {
-	// no-op when TracerOptions is nil
+	// no-op when StartSpanOptions is nil
 	ctx := context.Background()
 	subCtx, _ := StartSpan(ctx, nil)
 	require.Equal(t, ctx, subCtx)
 
-	// no-op when TracerOptions is empty
-	subCtx, _ = StartSpan(ctx, &TracerOptions{})
+	// no-op when StartSpanOptions is empty
+	subCtx, _ = StartSpan(ctx, &StartSpanOptions{})
 	require.Equal(t, ctx, subCtx)
 
 	// no-op when SpanName is empty
-	subCtx, _ = StartSpan(ctx, &TracerOptions{SpanName: ""})
+	subCtx, _ = StartSpan(ctx, &StartSpanOptions{SpanName: ""})
 	require.Equal(t, ctx, subCtx)
 
 	// creates a span when both tracer and SpanName are set
@@ -30,7 +30,7 @@ func TestStartSpan(t *testing.T) {
 		Name: "test",
 		Kind: SpanKindInternal,
 	}).NewTracer("module", "version")
-	subCtx1, endSpan1 := StartSpan(ctx, &TracerOptions{Tracer: tracer, SpanName: "test"})
+	subCtx1, endSpan1 := StartSpan(ctx, &StartSpanOptions{Tracer: tracer, SpanName: "test"})
 	defer endSpan1(nil)
 	require.NotEqual(t, ctx, subCtx1)
 
@@ -39,7 +39,7 @@ func TestStartSpan(t *testing.T) {
 		Name: "Sender.TestSpan",
 		Kind: SpanKindProducer,
 	}).NewTracer("module", "version")
-	subCtx2, endSpan2 := StartSpan(ctx, &TracerOptions{Tracer: tracer, SpanName: "Sender.TestSpan"})
+	subCtx2, endSpan2 := StartSpan(ctx, &StartSpanOptions{Tracer: tracer, SpanName: "Sender.TestSpan"})
 	defer endSpan2(nil)
 	require.NotEqual(t, ctx, subCtx2)
 }

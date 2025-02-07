@@ -438,7 +438,7 @@ func (ns *Namespace) startNegotiateClaimRenewer(ctx context.Context,
 
 			log.Writef(exported.EventAuth, "(%s) next refresh in %s", entityPath, nextClaimAt)
 
-			to := &tracing.TracerOptions{
+			to := &tracing.StartSpanOptions{
 				Tracer:     ns.tracer,
 				SpanName:   tracing.NegotiateClaimSpanName,
 				Attributes: tracing.GetEntityPathAttributes(entityPath),

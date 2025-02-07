@@ -497,7 +497,7 @@ func TestNewClientUnitTests(t *testing.T) {
 		require.True(t, client.tracer.Enabled())
 
 		// ensure attributes are set up correctly.
-		_, endSpan := tracing.StartSpan(context.Background(), &tracing.TracerOptions{
+		_, endSpan := tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
 			Tracer:   client.tracer,
 			SpanName: "TestSpan",
 		})
@@ -513,7 +513,7 @@ func TestNewClientUnitTests(t *testing.T) {
 		require.True(t, client.tracer.Enabled())
 
 		// ensure attributes are set up correctly.
-		_, endSpan = tracing.StartSpan(context.Background(), &tracing.TracerOptions{
+		_, endSpan = tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
 			Tracer:   client.tracer,
 			SpanName: "TestSpan",
 		})

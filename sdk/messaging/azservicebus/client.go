@@ -33,10 +33,12 @@ type Client struct {
 
 	linksMu      *sync.Mutex
 	links        map[uint64]amqpwrap.Closeable
-	tracer       tracing.Tracer
 	creds        clientCreds
 	namespace    internal.NamespaceForAMQPLinks
 	retryOptions RetryOptions
+
+	tracer     tracing.Tracer
+	propagator tracing.Propagator
 
 	// acceptNextTimeout controls how long the session accept can take before
 	// the server stops waiting.
@@ -57,7 +59,7 @@ type ClientOptions struct {
 	NewWebSocketConn func(ctx context.Context, args NewWebSocketConnArgs) (net.Conn, error)
 
 	// TracingProvider configures the tracing provider.
-	// It defaults to a no-op tracer.
+	// It defaults to a no-op provider
 	TracingProvider tracing.Provider
 
 	// RetryOptions controls how often operations are retried from this client and any
@@ -178,6 +180,7 @@ func newClientImpl(creds clientCreds, args clientImplArgs) (*Client, error) {
 	}
 
 	client.tracer = newTracer(tracingProvider, getFullyQualifiedNamespace(creds))
+	client.propagator = tracingProvider.NewPropagator()
 	nsOptions = append(nsOptions, internal.NamespaceWithTracer(client.tracer))
 
 	nsOptions = append(nsOptions, args.NSOptions...)
@@ -192,6 +195,7 @@ func (client *Client) NewReceiverForQueue(queueName string, options *ReceiverOpt
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	receiver, err := newReceiver(newReceiverArgs{
 		tracer:              client.tracer,
+		propagator:          client.propagator,
 		cleanupOnClose:      cleanupOnClose,
 		ns:                  client.namespace,
 		entity:              entity{Queue: queueName},
@@ -212,6 +216,7 @@ func (client *Client) NewReceiverForSubscription(topicName string, subscriptionN
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	receiver, err := newReceiver(newReceiverArgs{
 		tracer:              client.tracer,
+		propagator:          client.propagator,
 		cleanupOnClose:      cleanupOnClose,
 		ns:                  client.namespace,
 		entity:              entity{Topic: topicName, Subscription: subscriptionName},
@@ -237,6 +242,7 @@ func (client *Client) NewSender(queueOrTopic string, options *NewSenderOptions) 
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	sender, err := newSender(newSenderArgs{
 		tracer:         client.tracer,
+		propagator:     client.propagator,
 		ns:             client.namespace,
 		queueOrTopic:   queueOrTopic,
 		cleanupOnClose: cleanupOnClose,
@@ -260,6 +266,7 @@ func (client *Client) AcceptSessionForQueue(ctx context.Context, queueName strin
 		ctx,
 		newSessionReceiverArgs{
 			tracer:         client.tracer,
+			propagator:     client.propagator,
 			sessionID:      &sessionID,
 			ns:             client.namespace,
 			entity:         entity{Queue: queueName},
@@ -288,6 +295,7 @@ func (client *Client) AcceptSessionForSubscription(ctx context.Context, topicNam
 		ctx,
 		newSessionReceiverArgs{
 			tracer:         client.tracer,
+			propagator:     client.propagator,
 			sessionID:      &sessionID,
 			ns:             client.namespace,
 			entity:         entity{Topic: topicName, Subscription: subscriptionName},
@@ -358,6 +366,7 @@ func (client *Client) acceptNextSessionForEntity(ctx context.Context, entity ent
 		ctx,
 		newSessionReceiverArgs{
 			tracer:            client.tracer,
+			propagator:        client.propagator,
 			sessionID:         nil,
 			ns:                client.namespace,
 			entity:            entity,

@@ -27,7 +27,7 @@ func TestNewTracer(t *testing.T) {
 	require.NotNil(t, tracer)
 	require.True(t, tracer.Enabled())
 
-	_, endSpan := tracing.StartSpan(context.Background(), &tracing.TracerOptions{
+	_, endSpan := tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
 		Tracer:   tracer,
 		SpanName: "TestSpan",
 	})

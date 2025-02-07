@@ -53,13 +53,13 @@ func TestMatchingTracerStart(t *testing.T) {
 	}
 	ctx := context.Background()
 	// no-op when SpanName doesn't match
-	_, spn := tracer.Start(ctx, "BadSpanName", SpanKindProducer, nil)
+	_, spn := tracer.Start(ctx, "BadSpanName", SpanKindProducer, nil, nil)
 	require.EqualValues(t, spn, tracing.Span{})
 	// tracks span when SpanName matches
 	_, spn = tracer.Start(ctx, "TestSpan", SpanKindProducer, []Attribute{
 		{Key: MessagingSystem, Value: "servicebus"},
 		{Key: ServerAddress, Value: hostName},
-	})
+	}, nil)
 	require.NotNil(t, spn)
 	spn.SetAttributes(tracing.Attribute{
 		Key:   "TestAttributeKey",

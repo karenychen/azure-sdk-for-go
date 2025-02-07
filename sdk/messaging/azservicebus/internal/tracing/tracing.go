@@ -12,10 +12,13 @@ import (
 )
 
 type Attribute = tracing.Attribute
+type Link = tracing.Link
 type Tracer = tracing.Tracer
+type Propagator = tracing.Propagator
+type Carrier = tracing.Carrier
 type Provider = tracing.Provider
 
-type TracerOptions struct {
+type StartSpanOptions struct {
 	Tracer     Tracer
 	SpanName   SpanName
 	Attributes []Attribute
@@ -23,7 +26,7 @@ type TracerOptions struct {
 
 // StartSpan creates a span with the specified name and attributes.
 // If no span name is provided, no span is created.
-func StartSpan(ctx context.Context, options *TracerOptions) (context.Context, func(error)) {
+func StartSpan(ctx context.Context, options *StartSpanOptions) (context.Context, func(error)) {
 	if options == nil || options.SpanName == "" {
 		return ctx, func(error) {}
 	}
