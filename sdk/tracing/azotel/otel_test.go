@@ -250,8 +250,8 @@ func TestConvertPropagator(t *testing.T) {
 	propagator := &testPropagator{}
 	otelPropagator := convertPropagator(propagator)
 	require.NotNil(t, otelPropagator)
-	otelPropagator.Inject(context.Background(), nil)
-	otelPropagator.Extract(context.Background(), nil)
+	otelPropagator.Inject(context.Background(), propagation.MapCarrier{})
+	otelPropagator.Extract(context.Background(), propagation.MapCarrier{})
 	require.True(t, propagator.injectCalled)
 	require.True(t, propagator.extractCalled)
 	require.Len(t, propagator.Fields(), 1)

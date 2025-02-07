@@ -57,6 +57,8 @@ func (p Provider) NewPropagator() Propagator {
 type TracerOptions struct {
 	// SpanFromContext contains the implementation for the Tracer.SpanFromContext method.
 	SpanFromContext func(context.Context) Span
+	// LinkFromContext contains the implementation for the Tracer.LinkFromContext method.
+	LinkFromContext func(context.Context, ...Attribute) Link
 }
 
 // NewTracer creates a Tracer with the specified values.
@@ -69,6 +71,7 @@ func NewTracer(newSpanFn func(ctx context.Context, spanName string, options *Spa
 	return Tracer{
 		newSpanFn:         newSpanFn,
 		spanFromContextFn: options.SpanFromContext,
+		linkFromContextFn: options.LinkFromContext,
 	}
 }
 
@@ -78,6 +81,7 @@ type Tracer struct {
 	links             []Link
 	newSpanFn         func(ctx context.Context, spanName string, options *SpanOptions) (context.Context, Span)
 	spanFromContextFn func(ctx context.Context) Span
+	linkFromContextFn func(ctx context.Context, attrs ...Attribute) Link
 }
 
 // Start creates a new span and a context.Context that contains it.
@@ -99,7 +103,7 @@ func (t Tracer) Start(ctx context.Context, spanName string, options *SpanOptions
 // SetAttributes sets attrs to be applied to each Span. If a key from attrs
 // already exists for an attribute of the Span it will be overwritten with
 // the value contained in attrs.
-func (t *Tracer) SetAttributes(attrs ...Attribute) {
+func (t Tracer) SetAttributes(attrs ...Attribute) {
 	t.attrs = append(t.attrs, attrs...)
 }
 
@@ -115,6 +119,15 @@ func (t Tracer) SpanFromContext(ctx context.Context) Span {
 		return t.spanFromContextFn(ctx)
 	}
 	return Span{}
+}
+
+// LinkFromContext returns a link encapsulating the SpanContext of the current context.
+// If the provided context has no Span, an empty Link is returned.
+func (t Tracer) LinkFromContext(ctx context.Context, attrs ...Attribute) Link {
+	if t.linkFromContextFn != nil {
+		return t.linkFromContextFn(ctx, attrs...)
+	}
+	return Link{}
 }
 
 // SpanOptions contains optional settings for creating a span.

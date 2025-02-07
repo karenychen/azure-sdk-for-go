@@ -46,6 +46,13 @@ func NewTracingProvider(tracerProvider trace.TracerProvider, opts *TracingProvid
 			SpanFromContext: func(ctx context.Context) tracing.Span {
 				return convertSpan(trace.SpanFromContext(ctx))
 			},
+			LinkFromContext: func(ctx context.Context, attrs ...tracing.Attribute) tracing.Link {
+				link := trace.LinkFromContext(ctx, convertAttributes(attrs)...)
+				return tracing.Link{
+					SpanContext: convertOTelSpanContext(link.SpanContext),
+					Attributes:  attrs,
+				}
+			},
 		})
 
 	}, func() tracing.Propagator {
@@ -63,6 +70,12 @@ func convertSpan(traceSpan trace.Span) tracing.Span {
 		},
 		AddEvent: func(name string, attrs ...tracing.Attribute) {
 			traceSpan.AddEvent(name, trace.WithAttributes(convertAttributes(attrs)...))
+		},
+		AddLink: func(link tracing.Link) {
+			traceSpan.AddLink(convertLink(link))
+		},
+		SpanContext: func() tracing.SpanContext {
+			return convertOTelSpanContext(traceSpan.SpanContext())
 		},
 		SetStatus: func(code tracing.SpanStatus, desc string) {
 			traceSpan.SetStatus(convertStatus(code), desc)
@@ -95,12 +108,16 @@ func convertAttributes(attrs []tracing.Attribute) []attribute.KeyValue {
 func convertLinks(links []tracing.Link) []trace.Link {
 	var otelLinks []trace.Link
 	for _, link := range links {
-		otelLinks = append(otelLinks, trace.Link{
-			SpanContext: convertSpanContext(link.SpanContext),
-			Attributes:  convertAttributes(link.Attributes),
-		})
+		otelLinks = append(otelLinks, convertLink(link))
 	}
 	return otelLinks
+}
+
+func convertLink(link tracing.Link) trace.Link {
+	return trace.Link{
+		SpanContext: convertSpanContext(link.SpanContext),
+		Attributes:  convertAttributes(link.Attributes),
+	}
 }
 
 func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
@@ -114,6 +131,16 @@ func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
 		SpanID:     trace.SpanID(spanContext.SpanID()),
 		TraceFlags: trace.TraceFlags(spanContext.TraceFlags()),
 		TraceState: otelTraceState,
+		Remote:     spanContext.IsRemote(),
+	})
+}
+
+func convertOTelSpanContext(spanContext trace.SpanContext) tracing.SpanContext {
+	return tracing.NewSpanContext(tracing.SpanContextConfig{
+		TraceID:    tracing.TraceID(spanContext.TraceID()),
+		SpanID:     tracing.SpanID(spanContext.SpanID()),
+		TraceFlags: tracing.TraceFlags(spanContext.TraceFlags()),
+		TraceState: tracing.TraceState(spanContext.TraceState()),
 		Remote:     spanContext.IsRemote(),
 	})
 }
