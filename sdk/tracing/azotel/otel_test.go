@@ -179,13 +179,8 @@ func TestConvertLinks(t *testing.T) {
 		TraceID:    tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8},
 		SpanID:     tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
 		TraceFlags: tracing.TraceFlags(0x1),
-		TraceState: tracing.NewTraceState(
-			tracing.TraceStateImpl{
-				String: func() string {
-					return "key1=val1,key2=val2"
-				},
-			}),
-		Remote: true,
+		TraceState: "key1=val1,key2=val2",
+		Remote:     true,
 	})
 
 	links := convertLinks([]tracing.Link{
@@ -222,12 +217,8 @@ func TestConvertSpanContext(t *testing.T) {
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: traceFlags,
-		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{
-			String: func() string {
-				return "key1=val1,key2=val2"
-			},
-		}),
-		Remote: true,
+		TraceState: "key1=val1,key2=val2",
+		Remote:     true,
 	})
 
 	otelSpanContext := convertSpanContext(spanContext)

@@ -123,13 +123,12 @@ func convertLink(link tracing.Link) trace.Link {
 }
 
 func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
-	ts := spanContext.TraceState().String()
-	otelTraceState, _ := trace.ParseTraceState(ts)
+	oTelTraceState, _ := trace.ParseTraceState(string(spanContext.TraceState()))
 	return trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(spanContext.TraceID()),
 		SpanID:     trace.SpanID(spanContext.SpanID()),
 		TraceFlags: trace.TraceFlags(spanContext.TraceFlags()),
-		TraceState: otelTraceState,
+		TraceState: oTelTraceState,
 		Remote:     spanContext.IsRemote(),
 	})
 }
@@ -139,10 +138,8 @@ func convertOTelSpanContext(spanContext trace.SpanContext) tracing.SpanContext {
 		TraceID:    tracing.TraceID(spanContext.TraceID()),
 		SpanID:     tracing.SpanID(spanContext.SpanID()),
 		TraceFlags: tracing.TraceFlags(spanContext.TraceFlags()),
-		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{
-			String: spanContext.TraceState().String,
-		}),
-		Remote: spanContext.IsRemote(),
+		TraceState: tracing.TraceState(spanContext.TraceState().String()),
+		Remote:     spanContext.IsRemote(),
 	})
 }
 
