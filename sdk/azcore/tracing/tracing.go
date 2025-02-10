@@ -100,6 +100,7 @@ func (t Tracer) Start(ctx context.Context, spanName string, options *SpanOptions
 			opts = *options
 		}
 		opts.Attributes = append(opts.Attributes, t.attrs...)
+		opts.Links = append(opts.Links, t.links...)
 		return t.newSpanFn(ctx, spanName, &opts)
 	}
 	return ctx, Span{}
@@ -265,31 +266,8 @@ type TraceID [16]byte
 // TraceFlags contains flags that can be set on a SpanContext.
 type TraceFlags byte
 
-// TraceStateImpl contains the implementation for TraceState.
-type TraceStateImpl struct {
-	// String contains the implementation for the TraceState.String method.
-	String func() string
-}
-
-// NewTraceState creates a TraceState with the specified implementation.
-func NewTraceState(impl TraceStateImpl) TraceState {
-	return TraceState{
-		impl: impl,
-	}
-}
-
 // TraceState provides additional vendor-specific trace identification information across different distributed tracing systems.
-type TraceState struct {
-	impl TraceStateImpl
-}
-
-// String encodes the TraceState into a string compliant with the W3C Trace Context specification.
-func (ts TraceState) String() string {
-	if ts.impl.String != nil {
-		return ts.impl.String()
-	}
-	return ""
-}
+type TraceState string
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -398,6 +376,9 @@ func (p Propagator) Fields() []string {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// CarrierImpl abstracts the underlying implementation for Carrier,
+// allowing it to work with various tracing implementations.
+// Any zero-values will have their default, no-op behavior.
 type CarrierImpl struct {
 	// Get contains the implementation for the Carrier.Get method.
 	Get func(key string) string
