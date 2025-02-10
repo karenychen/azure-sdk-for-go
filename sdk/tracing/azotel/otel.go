@@ -123,7 +123,7 @@ func convertLink(link tracing.Link) trace.Link {
 }
 
 func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
-	oTelTraceState, _ := trace.ParseTraceState(string(spanContext.TraceState()))
+	oTelTraceState, _ := trace.ParseTraceState(spanContext.TraceState().String())
 	return trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(spanContext.TraceID()),
 		SpanID:     trace.SpanID(spanContext.SpanID()),
@@ -138,7 +138,7 @@ func convertOTelSpanContext(spanContext trace.SpanContext) tracing.SpanContext {
 		TraceID:    tracing.TraceID(spanContext.TraceID()),
 		SpanID:     tracing.SpanID(spanContext.SpanID()),
 		TraceFlags: tracing.TraceFlags(spanContext.TraceFlags()),
-		TraceState: tracing.TraceState(spanContext.TraceState().String()),
+		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{String: func() string { return spanContext.TraceState().String() }}),
 		Remote:     spanContext.IsRemote(),
 	})
 }

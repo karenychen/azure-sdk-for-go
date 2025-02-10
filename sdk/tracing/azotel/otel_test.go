@@ -179,7 +179,7 @@ func TestConvertLinks(t *testing.T) {
 		TraceID:    tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8},
 		SpanID:     tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
 		TraceFlags: tracing.TraceFlags(0x1),
-		TraceState: "key1=val1,key2=val2",
+		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{String: func() string { return "key1=val1,key2=val2" }}),
 		Remote:     true,
 	})
 
@@ -213,11 +213,12 @@ func TestConvertSpanContext(t *testing.T) {
 	traceID := tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8}
 	spanID := tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8}
 	traceFlags := tracing.TraceFlags(0x1)
+	traceState := tracing.NewTraceState(tracing.TraceStateImpl{String: func() string { return "key1=val1,key2=val2" }})
 	spanContext := tracing.NewSpanContext(tracing.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: traceFlags,
-		TraceState: "key1=val1,key2=val2",
+		TraceState: traceState,
 		Remote:     true,
 	})
 
@@ -227,6 +228,26 @@ func TestConvertSpanContext(t *testing.T) {
 	assert.EqualValues(t, traceFlags, otelSpanContext.TraceFlags())
 	assert.EqualValues(t, "key1=val1,key2=val2", otelSpanContext.TraceState().String())
 	assert.True(t, otelSpanContext.IsRemote())
+}
+
+func TestConvertOTelSpanContext(t *testing.T) {
+	traceID := trace.TraceID{1, 2, 3, 4, 5, 6, 7, 8}
+	spanID := trace.SpanID{1, 2, 3, 4, 5, 6, 7, 8}
+	traceFlags := trace.TraceFlags(0x1)
+	traceState, err := trace.ParseTraceState("key1=val1,key2=val2")
+	require.NoError(t, err)
+	oTelSpanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: traceFlags,
+		TraceState: traceState,
+	})
+	spanContext := convertOTelSpanContext(oTelSpanContext)
+	assert.EqualValues(t, traceID, spanContext.TraceID())
+	assert.EqualValues(t, spanID, spanContext.SpanID())
+	assert.EqualValues(t, traceFlags, spanContext.TraceFlags())
+	assert.EqualValues(t, "key1=val1,key2=val2", spanContext.TraceState().String())
+	assert.False(t, spanContext.IsRemote())
 }
 
 func TestConvertSpanKind(t *testing.T) {
