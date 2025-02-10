@@ -179,8 +179,13 @@ func TestConvertLinks(t *testing.T) {
 		TraceID:    tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8},
 		SpanID:     tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
 		TraceFlags: tracing.TraceFlags(0x1),
-		TraceState: &testTraceState{inner: "key1=val1,key2=val2"},
-		Remote:     true,
+		TraceState: tracing.NewTraceState(
+			tracing.TraceStateImpl{
+				String: func() string {
+					return "key1=val1,key2=val2"
+				},
+			}),
+		Remote: true,
 	})
 
 	links := convertLinks([]tracing.Link{
@@ -213,20 +218,23 @@ func TestConvertSpanContext(t *testing.T) {
 	traceID := tracing.TraceID{1, 2, 3, 4, 5, 6, 7, 8}
 	spanID := tracing.SpanID{1, 2, 3, 4, 5, 6, 7, 8}
 	traceFlags := tracing.TraceFlags(0x1)
-	traceState := &testTraceState{inner: "key1=val1,key2=val2"}
 	spanContext := tracing.NewSpanContext(tracing.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: traceFlags,
-		TraceState: traceState,
-		Remote:     true,
+		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{
+			String: func() string {
+				return "key1=val1,key2=val2"
+			},
+		}),
+		Remote: true,
 	})
 
 	otelSpanContext := convertSpanContext(spanContext)
 	assert.EqualValues(t, traceID, otelSpanContext.TraceID())
 	assert.EqualValues(t, spanID, otelSpanContext.SpanID())
 	assert.EqualValues(t, traceFlags, otelSpanContext.TraceFlags())
-	assert.EqualValues(t, traceState.inner, otelSpanContext.TraceState().String())
+	assert.EqualValues(t, "key1=val1,key2=val2", otelSpanContext.TraceState().String())
 	assert.True(t, otelSpanContext.IsRemote())
 }
 
@@ -247,11 +255,16 @@ func TestConvertStatus(t *testing.T) {
 }
 
 func TestConvertPropagator(t *testing.T) {
+	carrier := tracing.NewCarrier(tracing.CarrierImpl{
+		Get:  func(key string) string { return "" },
+		Set:  func(key, value string) {},
+		Keys: func() []string { return nil },
+	})
 	propagator := &testPropagator{}
 	otelPropagator := convertPropagator(propagator)
 	require.NotNil(t, otelPropagator)
-	otelPropagator.Inject(context.Background(), propagation.MapCarrier{})
-	otelPropagator.Extract(context.Background(), propagation.MapCarrier{})
+	otelPropagator.Inject(context.Background(), carrier)
+	otelPropagator.Extract(context.Background(), carrier)
 	require.True(t, propagator.injectCalled)
 	require.True(t, propagator.extractCalled)
 	require.Len(t, propagator.Fields(), 1)
@@ -330,14 +343,6 @@ func (ts *testSpan) SetAttributes(kv ...attribute.KeyValue) {
 func (ts *testSpan) TracerProvider() trace.TracerProvider {
 	ts.t.Fatal("TracerProvider not required")
 	return nil
-}
-
-type testTraceState struct {
-	inner string
-}
-
-func (ts *testTraceState) String() string {
-	return ts.inner
 }
 
 type testPropagator struct {

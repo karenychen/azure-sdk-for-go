@@ -55,9 +55,11 @@ func NewTracingProvider(tracerProvider trace.TracerProvider, opts *TracingProvid
 			},
 		})
 
-	}, func() tracing.Propagator {
-		return convertPropagator(propagation.TraceContext{})
-	}, nil)
+	}, &tracing.ProviderOptions{
+		NewPropagatorFn: func() tracing.Propagator {
+			return convertPropagator(propagation.TraceContext{})
+		},
+	})
 }
 
 func convertSpan(traceSpan trace.Span) tracing.Span {
@@ -121,10 +123,7 @@ func convertLink(link tracing.Link) trace.Link {
 }
 
 func convertSpanContext(spanContext tracing.SpanContext) trace.SpanContext {
-	var ts string
-	if spanContext.TraceState() != nil {
-		ts = spanContext.TraceState().String()
-	}
+	ts := spanContext.TraceState().String()
 	otelTraceState, _ := trace.ParseTraceState(ts)
 	return trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(spanContext.TraceID()),
@@ -140,8 +139,10 @@ func convertOTelSpanContext(spanContext trace.SpanContext) tracing.SpanContext {
 		TraceID:    tracing.TraceID(spanContext.TraceID()),
 		SpanID:     tracing.SpanID(spanContext.SpanID()),
 		TraceFlags: tracing.TraceFlags(spanContext.TraceFlags()),
-		TraceState: tracing.TraceState(spanContext.TraceState()),
-		Remote:     spanContext.IsRemote(),
+		TraceState: tracing.NewTraceState(tracing.TraceStateImpl{
+			String: spanContext.TraceState().String,
+		}),
+		Remote: spanContext.IsRemote(),
 	})
 }
 
