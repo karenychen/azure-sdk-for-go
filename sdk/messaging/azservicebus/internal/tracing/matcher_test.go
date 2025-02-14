@@ -28,13 +28,16 @@ func TestNewSpanValidator(t *testing.T) {
 	require.NotNil(t, tracer)
 	require.True(t, tracer.Enabled())
 
-	_, endSpan := runtime.StartSpan(context.Background(), "TestSpan", tracer, &runtime.StartSpanOptions{
+	ctx, endSpan := runtime.StartSpan(context.Background(), "TestSpan", tracer, &runtime.StartSpanOptions{
 		Kind: tracing.SpanKindProducer,
 		Attributes: []Attribute{
 			{Key: ServerAddress, Value: hostName},
 		},
 	})
 	defer func() { endSpan(nil) }()
+
+	require.NotNil(t, tracer.SpanFromContext(ctx))
+	require.NotNil(t, tracer.LinkFromContext(ctx))
 }
 
 func TestMatchingTracerStart(t *testing.T) {
@@ -65,5 +68,7 @@ func TestMatchingTracerStart(t *testing.T) {
 		Key:   "TestAttributeKey",
 		Value: "TestAttributeValue",
 	})
+	spn.AddLink(tracing.Link{})
+	spn.SpanContext()
 	spn.SetStatus(SpanStatusOK, "ok")
 }

@@ -9,15 +9,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/propagation"
 )
 
-const (
-	SpanStatusUnset = tracing.SpanStatusUnset
-	SpanStatusError = tracing.SpanStatusError
-	SpanStatusOK    = tracing.SpanStatusOK
-)
-
+type Span = tracing.Span
 type SpanStatus = tracing.SpanStatus
 
 // NewSpanValidator creates a Provider that verifies a span was created that matches the specified SpanMatcher.
@@ -39,7 +33,7 @@ func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
 			require.ElementsMatch(t, matcher.Links, tt.match.links, "span links don't match")
 		})
 
-		return tracing.NewTracer(func(ctx context.Context, spanName string, options *tracing.SpanOptions) (context.Context, tracing.Span) {
+		return tracing.NewTracer(func(ctx context.Context, spanName string, options *tracing.SpanOptions) (context.Context, Span) {
 			kind := tracing.SpanKindInternal
 			attrs := []Attribute{}
 			links := []Link{}
@@ -49,20 +43,14 @@ func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
 				links = append(links, options.Links...)
 			}
 			return tt.Start(ctx, spanName, kind, attrs, links)
-		}, nil)
-	}, func() Propagator {
-		return tracing.NewPropagator(
-			tracing.PropagatorImpl{
-				Inject: func(ctx context.Context, carrier tracing.Carrier) {
-					propagation.TraceContext{}.Inject(ctx, carrier)
-				},
-				Extract: func(ctx context.Context, carrier tracing.Carrier) context.Context {
-					return propagation.TraceContext{}.Extract(ctx, carrier)
-				},
-				Fields: func() []string {
-					return propagation.TraceContext{}.Fields()
-				},
-			})
+		}, &tracing.TracerOptions{
+			SpanFromContext: func(ctx context.Context) Span {
+				return convertSpan(tt.match)
+			},
+			LinkFromContext: func(ctx context.Context, attrs ...Attribute) Link {
+				return tracing.Link{Attributes: attrs}
+			},
+		})
 	}, nil)
 }
 
@@ -80,22 +68,29 @@ type matchingTracer struct {
 	match   *span
 }
 
-func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind SpanKind, attrs []Attribute, links []Link) (context.Context, tracing.Span) {
+func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind SpanKind, attrs []Attribute, links []Link) (context.Context, Span) {
 	if spanName != mt.matcher.Name {
-		return ctx, tracing.Span{}
+		return ctx, Span{}
 	}
 	// span name matches our matcher, track it
 	mt.match = &span{
 		name:  spanName,
 		kind:  kind,
+		spCtx: SpanContext{},
 		attrs: attrs,
 		links: links,
 	}
-	return ctx, tracing.NewSpan(tracing.SpanImpl{
-		End:           mt.match.End,
-		SetStatus:     mt.match.SetStatus,
-		SetAttributes: mt.match.SetAttributes,
-		AddLink:       mt.match.AddLink,
+
+	return ctx, convertSpan(mt.match)
+}
+
+func convertSpan(sp *span) Span {
+	return tracing.NewSpan(tracing.SpanImpl{
+		End:           sp.End,
+		SpanContext:   sp.SpanContext,
+		SetStatus:     sp.SetStatus,
+		SetAttributes: sp.SetAttributes,
+		AddLink:       sp.AddLink,
 	})
 }
 
@@ -103,14 +98,19 @@ type span struct {
 	name   string
 	kind   SpanKind
 	status SpanStatus
-	desc   string
+	spCtx  tracing.SpanContext
 	attrs  []Attribute
 	links  []Link
+	desc   string
 	ended  bool
 }
 
 func (s *span) End() {
 	s.ended = true
+}
+
+func (s *span) SpanContext() tracing.SpanContext {
+	return s.spCtx
 }
 
 func (s *span) SetAttributes(attrs ...Attribute) {

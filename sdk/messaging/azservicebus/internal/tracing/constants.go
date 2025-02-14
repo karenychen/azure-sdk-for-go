@@ -34,10 +34,18 @@ const (
 type SpanKind = tracing.SpanKind
 
 const (
-	SpanKindInternal tracing.SpanKind = tracing.SpanKindInternal
-	SpanKindClient   tracing.SpanKind = tracing.SpanKindClient
-	SpanKindProducer tracing.SpanKind = tracing.SpanKindProducer
-	SpanKindConsumer tracing.SpanKind = tracing.SpanKindConsumer
+	SpanKindInternal = tracing.SpanKindInternal
+	SpanKindClient   = tracing.SpanKindClient
+	SpanKindProducer = tracing.SpanKindProducer
+	SpanKindConsumer = tracing.SpanKindConsumer
+)
+
+type SpanContext = tracing.SpanContext
+
+const (
+	SpanStatusUnset = tracing.SpanStatusUnset
+	SpanStatusError = tracing.SpanStatusError
+	SpanStatusOK    = tracing.SpanStatusOK
 )
 
 // OTel-specific messaging attributes

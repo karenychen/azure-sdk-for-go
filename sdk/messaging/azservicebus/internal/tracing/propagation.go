@@ -30,7 +30,15 @@ type messageWrapper struct {
 
 // MessageCarrierAdapter wraps a Message so that it implements the propagation.TextMapCarrier interface
 func MessageCarrierAdapter(message *amqp.Message) tracing.Carrier {
-	return &messageWrapper{message: message}
+	if message == nil {
+		message = &amqp.Message{}
+	}
+	mw := &messageWrapper{message: message}
+	return tracing.NewCarrier(tracing.CarrierImpl{
+		Get:  mw.Get,
+		Set:  mw.Set,
+		Keys: mw.Keys,
+	})
 }
 
 func (mw *messageWrapper) Set(key string, value string) {
