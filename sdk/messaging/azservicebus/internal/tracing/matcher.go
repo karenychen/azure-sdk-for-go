@@ -17,7 +17,7 @@ type SpanStatus = tracing.SpanStatus
 // NewSpanValidator creates a Provider that verifies a span was created that matches the specified SpanMatcher.
 // The returned Provider can be used to create a client with a tracing provider that will validate spans in unit tests.
 func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
-	return tracing.NewProvider(func(name, version string) Tracer {
+	return tracing.NewProvider(func(name, version string) tracing.Tracer {
 		tt := matchingTracer{
 			matcher: matcher,
 		}

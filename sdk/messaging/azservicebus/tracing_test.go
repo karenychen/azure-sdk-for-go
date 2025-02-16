@@ -16,61 +16,23 @@ import (
 func TestNewTracer(t *testing.T) {
 	hostName := "fake.something"
 	provider := tracing.NewSpanValidator(t, tracing.SpanMatcher{
-		Name:   "TestSpan",
+		Name:   "test_span topic",
 		Status: tracing.SpanStatusUnset,
 		Attributes: []tracing.Attribute{
 			{Key: tracing.MessagingSystem, Value: "servicebus"},
 			{Key: tracing.ServerAddress, Value: hostName},
+			{Key: tracing.DestinationName, Value: "topic"},
+			{Key: tracing.SubscriptionName, Value: "subscription"},
 		},
 	})
-	tracer := newTracer(provider, hostName)
+	tracer := newTracer(provider, clientCreds{fullyQualifiedNamespace: hostName}, "topic", "subscription")
 	require.NotNil(t, tracer)
-	require.True(t, tracer.Enabled())
 
 	_, endSpan := tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
-		Tracer:   tracer,
-		SpanName: "TestSpan",
+		Tracer:        tracer,
+		OperationName: "test_span",
 	})
 	defer func() { endSpan(nil) }()
-}
-
-func TestGetSenderSpanAttributes(t *testing.T) {
-	queueOrTopic := "queue"
-	operationName := tracing.SendOperationName
-	expectedAttrs := []tracing.Attribute{
-		{Key: tracing.DestinationName, Value: queueOrTopic},
-		{Key: tracing.OperationType, Value: string(tracing.SendOperationType)},
-		{Key: tracing.OperationName, Value: string(operationName)},
-	}
-
-	result := getSenderSpanAttributes(queueOrTopic, operationName)
-	require.ElementsMatch(t, expectedAttrs, result)
-}
-
-func TestGetReceiverSpanAttributes(t *testing.T) {
-	entityPath := "entity"
-	operationName := tracing.ReceiveOperationName
-	expectedAttrs := []tracing.Attribute{
-		{Key: tracing.DestinationName, Value: entityPath},
-		{Key: tracing.OperationName, Value: string(operationName)},
-		{Key: tracing.OperationType, Value: string(tracing.ReceiveOperationType)},
-	}
-
-	result := getReceiverSpanAttributes(entityPath, operationName)
-	require.ElementsMatch(t, expectedAttrs, result)
-}
-
-func TestGetSessionSpanAttributes(t *testing.T) {
-	entityPath := "entity"
-	operationName := tracing.GetSessionStateOperationName
-	expectedAttrs := []tracing.Attribute{
-		{Key: tracing.DestinationName, Value: entityPath},
-		{Key: tracing.OperationName, Value: string(operationName)},
-		{Key: tracing.OperationType, Value: string(tracing.SessionOperationType)},
-	}
-
-	result := getSessionSpanAttributes(entityPath, operationName)
-	require.ElementsMatch(t, expectedAttrs, result)
 }
 
 func TestGetMessageSpanAttributes(t *testing.T) {
@@ -80,7 +42,7 @@ func TestGetMessageSpanAttributes(t *testing.T) {
 	// can parse empty message
 	message := &Message{}
 	expectedAttrs := []tracing.Attribute{}
-	result := getMessageSpanAttributes(message)
+	result := getMessageSpanAttributes(message.toAMQPMessage())
 	require.ElementsMatch(t, expectedAttrs, result)
 
 	// can parse message with messageId
@@ -90,7 +52,7 @@ func TestGetMessageSpanAttributes(t *testing.T) {
 	expectedAttrs = []tracing.Attribute{
 		{Key: tracing.MessageID, Value: messageId},
 	}
-	result = getMessageSpanAttributes(message)
+	result = getMessageSpanAttributes(message.toAMQPMessage())
 	require.ElementsMatch(t, expectedAttrs, result)
 
 	// can parse message with correlationId
@@ -100,7 +62,7 @@ func TestGetMessageSpanAttributes(t *testing.T) {
 	expectedAttrs = []tracing.Attribute{
 		{Key: tracing.ConversationID, Value: correlationId},
 	}
-	result = getMessageSpanAttributes(message)
+	result = getMessageSpanAttributes(message.toAMQPMessage())
 	require.ElementsMatch(t, expectedAttrs, result)
 
 	// can parse message with both messageId and correlationId
@@ -112,7 +74,7 @@ func TestGetMessageSpanAttributes(t *testing.T) {
 		{Key: tracing.MessageID, Value: messageId},
 		{Key: tracing.ConversationID, Value: correlationId},
 	}
-	result = getMessageSpanAttributes(message)
+	result = getMessageSpanAttributes(message.toAMQPMessage())
 	require.ElementsMatch(t, expectedAttrs, result)
 }
 

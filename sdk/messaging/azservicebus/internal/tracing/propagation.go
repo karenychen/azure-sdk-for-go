@@ -4,32 +4,17 @@
 package tracing
 
 import (
-	"context"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"github.com/Azure/go-amqp"
 )
-
-// Inject injects the trace context from ctx into the message
-func Inject(ctx context.Context, propagator tracing.Propagator, msg *amqp.Message) {
-	propagator.Inject(ctx, MessageCarrierAdapter(msg))
-}
-
-// Extract extracts the remote trace context from the message and set it onto ctx
-func Extract(ctx context.Context, propagator tracing.Propagator, message *amqp.Message) context.Context {
-	if message != nil {
-		ctx = propagator.Extract(ctx, MessageCarrierAdapter(message))
-	}
-	return ctx
-}
 
 // messageWrapper implements the TextMapCarrier interface for sender side
 type messageWrapper struct {
 	message *amqp.Message
 }
 
-// MessageCarrierAdapter wraps a Message so that it implements the propagation.TextMapCarrier interface
-func MessageCarrierAdapter(message *amqp.Message) tracing.Carrier {
+// messageCarrierAdapter wraps a Message so that it implements the propagation.TextMapCarrier interface
+func messageCarrierAdapter(message *amqp.Message) tracing.Carrier {
 	if message == nil {
 		message = &amqp.Message{}
 	}

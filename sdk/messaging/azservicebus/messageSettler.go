@@ -34,7 +34,7 @@ func newMessageSettler(tracer tracing.Tracer, links internal.AMQPLinks, retryOpt
 	}
 }
 
-func (s *messageSettler) settleWithRetries(ctx context.Context, to *tracing.StartSpanOptions, settleFn func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error) error {
+func (s *messageSettler) settleWithRetries(ctx context.Context, settleFn func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error, to *tracing.StartSpanOptions) error {
 	if s == nil {
 		return internal.NewErrNonRetriable("messages that are received in `ReceiveModeReceiveAndDelete` mode are not settleable")
 	}
@@ -57,14 +57,7 @@ type CompleteMessageOptions struct {
 
 // CompleteMessage completes a message, deleting it from the queue or subscription.
 func (ms *messageSettler) CompleteMessage(ctx context.Context, message *ReceivedMessage, options *CompleteMessageOptions) error {
-	to := &tracing.StartSpanOptions{
-		Tracer:   ms.tracer,
-		SpanName: tracing.CompleteSpanName,
-		Attributes: append(
-			getReceiverSpanAttributes(ms.links.EntityPath(), tracing.CompleteOperationName),
-			getReceivedMessageSpanAttributes(message)...),
-	}
-	return ms.settleWithRetries(ctx, to, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
+	return ms.settleWithRetries(ctx, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
 		var err error
 
 		if shouldSettleOnReceiver(message) {
@@ -82,6 +75,10 @@ func (ms *messageSettler) CompleteMessage(ctx context.Context, message *Received
 		}
 
 		return err
+	}, &tracing.StartSpanOptions{
+		Tracer:        ms.tracer,
+		OperationName: tracing.CompleteOperationName,
+		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
 }
 
@@ -95,14 +92,7 @@ type AbandonMessageOptions struct {
 // This will increment its delivery count, and potentially cause it to be dead lettered
 // depending on your queue or subscription's configuration.
 func (ms *messageSettler) AbandonMessage(ctx context.Context, message *ReceivedMessage, options *AbandonMessageOptions) error {
-	to := &tracing.StartSpanOptions{
-		Tracer:   ms.tracer,
-		SpanName: tracing.AbandonSpanName,
-		Attributes: append(
-			getReceiverSpanAttributes(ms.links.EntityPath(), tracing.AbandonOperationName),
-			getReceivedMessageSpanAttributes(message)...),
-	}
-	return ms.settleWithRetries(ctx, to, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
+	return ms.settleWithRetries(ctx, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
 		var err error
 
 		if shouldSettleOnReceiver(message) {
@@ -141,6 +131,10 @@ func (ms *messageSettler) AbandonMessage(ctx context.Context, message *ReceivedM
 		}
 
 		return err
+	}, &tracing.StartSpanOptions{
+		Tracer:        ms.tracer,
+		OperationName: tracing.AbandonOperationName,
+		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
 }
 
@@ -153,14 +147,7 @@ type DeferMessageOptions struct {
 // DeferMessage will cause a message to be deferred. Deferred messages
 // can be received using `Receiver.ReceiveDeferredMessages`.
 func (ms *messageSettler) DeferMessage(ctx context.Context, message *ReceivedMessage, options *DeferMessageOptions) error {
-	to := &tracing.StartSpanOptions{
-		Tracer:   ms.tracer,
-		SpanName: tracing.DeferSpanName,
-		Attributes: append(
-			getReceiverSpanAttributes(ms.links.EntityPath(), tracing.DeferOperationName),
-			getReceivedMessageSpanAttributes(message)...),
-	}
-	return ms.settleWithRetries(ctx, to, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
+	return ms.settleWithRetries(ctx, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
 		var err error
 
 		if shouldSettleOnReceiver(message) {
@@ -200,6 +187,10 @@ func (ms *messageSettler) DeferMessage(ctx context.Context, message *ReceivedMes
 		}
 
 		return err
+	}, &tracing.StartSpanOptions{
+		Tracer:        ms.tracer,
+		OperationName: tracing.DeferOperationName,
+		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
 }
 
@@ -220,14 +211,7 @@ type DeadLetterOptions struct {
 // queue or subscription. To receive these messages create a receiver with `Client.NewReceiver()`
 // using the `SubQueue` option.
 func (ms *messageSettler) DeadLetterMessage(ctx context.Context, message *ReceivedMessage, options *DeadLetterOptions) error {
-	to := &tracing.StartSpanOptions{
-		Tracer:   ms.tracer,
-		SpanName: tracing.DeadLetterSpanName,
-		Attributes: append(
-			getReceiverSpanAttributes(ms.links.EntityPath(), tracing.DeadLetterOperationName),
-			getReceivedMessageSpanAttributes(message)...),
-	}
-	return ms.settleWithRetries(ctx, to, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
+	return ms.settleWithRetries(ctx, func(receiver amqpwrap.AMQPReceiver, rpcLink amqpwrap.RPCLink) error {
 		reason := ""
 		description := ""
 
@@ -287,6 +271,10 @@ func (ms *messageSettler) DeadLetterMessage(ctx context.Context, message *Receiv
 		}
 
 		return err
+	}, &tracing.StartSpanOptions{
+		Tracer:        ms.tracer,
+		OperationName: tracing.DeadLetterOperationName,
+		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
 }
 

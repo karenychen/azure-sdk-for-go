@@ -5,6 +5,7 @@ package azservicebus
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -499,12 +500,12 @@ func TestNewClientUnitTests(t *testing.T) {
 		// when tracing provider is not set, use a no-op tracer.
 		client, err := NewClient(hostName, struct{ azcore.TokenCredential }{}, nil)
 		require.NoError(t, err)
-		require.Zero(t, client.tracer)
-		require.False(t, client.tracer.Enabled())
+		require.NotZero(t, client.tracingProvider)
+		require.False(t, client.tracingProvider.NewTracer("module", "version").Enabled())
 
 		// when tracing provider is set, the tracer is set up with the provider.
 		provider := tracing.NewSpanValidator(t, tracing.SpanMatcher{
-			Name:   "TestSpan",
+			Name:   fmt.Sprintf("%s %s", "test_span", "queue"),
 			Status: tracing.SpanStatusUnset,
 			Attributes: []tracing.Attribute{
 				{Key: tracing.MessagingSystem, Value: "servicebus"},
@@ -515,13 +516,14 @@ func TestNewClientUnitTests(t *testing.T) {
 			TracingProvider: provider,
 		})
 		require.NoError(t, err)
-		require.NotZero(t, client.tracer)
-		require.True(t, client.tracer.Enabled())
+		require.NotZero(t, client.tracingProvider)
+		require.True(t, client.tracingProvider.NewTracer("module", "version").Enabled())
+		tracer := newTracer(provider, client.creds, "queue", "")
 
 		// ensure attributes are set up correctly.
 		_, endSpan := tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
-			Tracer:   client.tracer,
-			SpanName: "TestSpan",
+			Tracer:        tracer,
+			OperationName: "test_span",
 		})
 		endSpan(nil)
 
@@ -531,13 +533,14 @@ func TestNewClientUnitTests(t *testing.T) {
 			TracingProvider: provider,
 		})
 		require.NoError(t, err)
-		require.NotZero(t, client.tracer)
-		require.True(t, client.tracer.Enabled())
+		require.NotZero(t, client.tracingProvider)
+		require.True(t, client.tracingProvider.NewTracer("module", "version").Enabled())
+		tracer = newTracer(provider, client.creds, "queue", "")
 
 		// ensure attributes are set up correctly.
 		_, endSpan = tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
-			Tracer:   client.tracer,
-			SpanName: "TestSpan",
+			Tracer:        tracer,
+			OperationName: "test_span",
 		})
 		endSpan(nil)
 	})

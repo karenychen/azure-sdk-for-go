@@ -346,7 +346,7 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 
 	var asSBError *Error
 
-	receiver.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.PeekMessages",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -356,14 +356,14 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "receive"},
 			{Key: tracing.BatchMessageCount, Value: int64(1)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	receiveErr = &amqp.LinkError{}
 	messages, err := receiver.PeekMessages(context.Background(), 1, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeConnectionLost, asSBError.Code)
 
-	receiver.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.ReceiveDeferredMessages",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -373,14 +373,14 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "receive"},
 			{Key: tracing.BatchMessageCount, Value: int64(1)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	receiveErr = &amqp.ConnError{}
 	messages, err = receiver.ReceiveDeferredMessages(context.Background(), []int64{1}, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeConnectionLost, asSBError.Code)
 
-	receiver.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.ReceiveMessages",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusUnset,
@@ -390,7 +390,7 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "receive"},
 			{Key: tracing.BatchMessageCount, Value: int64(1)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	receiveErr = &amqp.ConnError{}
 	messages, err = receiver.ReceiveMessages(context.Background(), 1, nil)
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 		settleOnMgmtLink: true,
 	}
 
-	receiver.settler.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.settler.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.AbandonMessage",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -421,13 +421,13 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "settle"},
 			{Key: tracing.DeliveryCount, Value: int64(0)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	err = receiver.AbandonMessage(context.Background(), msg, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.settler.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.settler.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.CompleteMessage",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -438,13 +438,13 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "settle"},
 			{Key: tracing.DeliveryCount, Value: int64(0)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	err = receiver.CompleteMessage(context.Background(), msg, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.settler.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.settler.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.DeadLetterMessage",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -455,13 +455,13 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "settle"},
 			{Key: tracing.DeliveryCount, Value: int64(0)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	err = receiver.DeadLetterMessage(context.Background(), msg, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.settler.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.settler.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.DeferMessage",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -472,13 +472,13 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "settle"},
 			{Key: tracing.DeliveryCount, Value: int64(0)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	err = receiver.DeferMessage(context.Background(), msg, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "Receiver.RenewMessageLock",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -488,7 +488,7 @@ func TestReceiver_UserFacingErrors(t *testing.T) {
 			{Key: tracing.OperationType, Value: "receive"},
 			{Key: tracing.DeliveryCount, Value: int64(0)},
 		},
-	}).NewTracer("module", "version")
+	}), clientCreds{}, "queue", "")
 	err = receiver.RenewMessageLock(context.Background(), msg, nil)
 	require.Empty(t, messages)
 	require.ErrorAs(t, err, &asSBError)
@@ -814,7 +814,7 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 
 	// we'll return valid responses for the mgmt link since we need
 	// that to get a session receiver.
-	client.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	client.tracingProvider = tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "SessionReceiver.AcceptSession",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusUnset,
@@ -822,7 +822,7 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 			{Key: tracing.DestinationName, Value: "queue"},
 			{Key: tracing.OperationName, Value: "accept_session"},
 			{Key: tracing.OperationType, Value: "session"},
-		}}).NewTracer("module", "version")
+		}})
 	receiver, err := client.AcceptSessionForQueue(context.Background(), "queue", "session ID", nil)
 	require.NoError(t, err)
 
@@ -831,7 +831,7 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 
 	lockLost = true
 
-	receiver.inner.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.inner.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "SessionReceiver.GetSessionState",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -839,13 +839,13 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 			{Key: tracing.DestinationName, Value: "queue"},
 			{Key: tracing.OperationName, Value: "get_session_state"},
 			{Key: tracing.OperationType, Value: "session"},
-		}}).NewTracer("module", "version")
+		}}), clientCreds{}, "queue", "")
 	state, err := receiver.GetSessionState(context.Background(), nil)
 	require.Nil(t, state)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.inner.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.inner.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "SessionReceiver.SetSessionState",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -853,12 +853,12 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 			{Key: tracing.DestinationName, Value: "queue"},
 			{Key: tracing.OperationName, Value: "set_session_state"},
 			{Key: tracing.OperationType, Value: "session"},
-		}}).NewTracer("module", "version")
+		}}), clientCreds{}, "queue", "")
 	err = receiver.SetSessionState(context.Background(), []byte{}, nil)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
 
-	receiver.inner.tracer = tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	receiver.inner.tracer = newTracer(tracing.NewSpanValidator(t, tracing.SpanMatcher{
 		Name:   "SessionReceiver.RenewSessionLock",
 		Kind:   tracing.SpanKindConsumer,
 		Status: tracing.SpanStatusError,
@@ -866,7 +866,7 @@ func TestSessionReceiverUserFacingErrors_Methods(t *testing.T) {
 			{Key: tracing.DestinationName, Value: "queue"},
 			{Key: tracing.OperationName, Value: "renew_session_lock"},
 			{Key: tracing.OperationType, Value: "session"},
-		}}).NewTracer("module", "version")
+		}}), clientCreds{}, "queue", "")
 	err = receiver.RenewSessionLock(context.Background(), nil)
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)

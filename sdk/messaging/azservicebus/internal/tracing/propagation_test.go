@@ -45,8 +45,8 @@ func TestPropagation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			Inject(context.TODO(), propagator, tc.message)
-			Extract(context.TODO(), propagator, tc.message)
+			propagator.Inject(context.TODO(), messageCarrierAdapter(tc.message))
+			propagator.Extract(context.TODO(), messageCarrierAdapter(tc.message))
 
 			if !tc.isNilMessage {
 				require.EqualValues(t, 1, len(tc.message.ApplicationProperties))

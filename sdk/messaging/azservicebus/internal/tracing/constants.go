@@ -5,32 +5,6 @@ package tracing
 
 import "github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 
-type SpanName string
-
-const (
-	NegotiateClaimSpanName SpanName = "Namespace.NegotiateClaim"
-
-	SendSpanName            SpanName = "Sender.SendMessage"
-	SendBatchSpanName       SpanName = "Sender.SendMessageBatch"
-	ScheduleSpanName        SpanName = "Sender.ScheduleMessages"
-	CancelScheduledSpanName SpanName = "Sender.CancelScheduledMessages"
-
-	ReceiveSpanName          SpanName = "Receiver.ReceiveMessages"
-	PeekSpanName             SpanName = "Receiver.PeekMessages"
-	ReceiveDeferredSpanName  SpanName = "Receiver.ReceiveDeferredMessages"
-	RenewMessageLockSpanName SpanName = "Receiver.RenewMessageLock"
-
-	CompleteSpanName   SpanName = "Receiver.CompleteMessage"
-	AbandonSpanName    SpanName = "Receiver.AbandonMessage"
-	DeferSpanName      SpanName = "Receiver.DeferMessage"
-	DeadLetterSpanName SpanName = "Receiver.DeadLetterMessage"
-
-	AcceptSessionSpanName    SpanName = "SessionReceiver.AcceptSession"
-	GetSessionStateSpanName  SpanName = "SessionReceiver.GetSessionState"
-	SetSessionStateSpanName  SpanName = "SessionReceiver.SetSessionState"
-	RenewSessionLockSpanName SpanName = "SessionReceiver.RenewSessionLock"
-)
-
 type SpanKind = tracing.SpanKind
 
 const (
@@ -48,7 +22,6 @@ const (
 	SpanStatusOK    = tracing.SpanStatusOK
 )
 
-// OTel-specific messaging attributes
 const (
 	ServerAddress     = "server.address"
 	MessagingSystem   = "messaging.system"
@@ -67,15 +40,16 @@ const (
 type MessagingOperationType string
 
 const (
+	CreateOperationType  MessagingOperationType = "create"
 	SendOperationType    MessagingOperationType = "send"
 	ReceiveOperationType MessagingOperationType = "receive"
 	SettleOperationType  MessagingOperationType = "settle"
-	SessionOperationType MessagingOperationType = "session"
 )
 
 type MessagingOperationName string
 
 const (
+	CreateOperationName          MessagingOperationName = "create"
 	SendOperationName            MessagingOperationName = "send"
 	ScheduleOperationName        MessagingOperationName = "schedule"
 	CancelScheduledOperationName MessagingOperationName = "cancel_scheduled"
