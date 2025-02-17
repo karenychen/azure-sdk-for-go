@@ -37,18 +37,19 @@ func TestPropagation(t *testing.T) {
 		},
 		Extract: func(ctx context.Context, carrier tracing.Carrier) context.Context {
 			require.Zero(t, carrier.Get("badFlag"))
-			require.EqualValues(t, 1, len(carrier.Keys()))
-			require.EqualValues(t, "true", carrier.Get("injected"))
 			return ctx
 		},
 	})
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			propagator.Inject(context.TODO(), messageCarrierAdapter(tc.message))
-			propagator.Extract(context.TODO(), messageCarrierAdapter(tc.message))
+			carrier := messageCarrierAdapter(tc.message)
+			propagator.Inject(context.TODO(), carrier)
+			propagator.Extract(context.TODO(), carrier)
 
 			if !tc.isNilMessage {
+				require.EqualValues(t, 1, len(carrier.Keys()))
+				require.EqualValues(t, "true", carrier.Get("injected"))
 				require.EqualValues(t, 1, len(tc.message.ApplicationProperties))
 				require.EqualValues(t, "true", tc.message.ApplicationProperties["injected"])
 			}

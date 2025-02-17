@@ -104,7 +104,7 @@ func (s *Sender) SendMessageBatch(ctx context.Context, batch *MessageBatch, opti
 	defer func() { endSpan(err) }()
 	sendSpan := s.tracer.SpanFromContext(sendCtx)
 
-	err = s.injectMessageBatchContext(ctx, sendSpan, batch)
+	err = batch.injectCreationCtx(ctx, s.tracer, sendSpan)
 	if err != nil {
 		return internal.TransformError(err)
 	}
@@ -114,23 +114,6 @@ func (s *Sender) SendMessageBatch(ctx context.Context, batch *MessageBatch, opti
 	}, s.retryOptions, nil)
 
 	return internal.TransformError(err)
-}
-
-func (s *Sender) injectMessageBatchContext(ctx context.Context, sendSpan tracing.Span, batch *MessageBatch) error {
-	for i, msg := range batch.marshaledMessages {
-		var amqpMessage = &amqp.Message{}
-		err := amqpMessage.UnmarshalBinary(msg)
-		if err != nil {
-			return err
-		}
-		createMessageSpan(ctx, s.tracer, sendSpan, amqpMessage)
-		bin, err := amqpMessage.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		batch.marshaledMessages[i] = bin
-	}
-	return nil
 }
 
 // ScheduleMessagesOptions contains optional parameters for the ScheduleMessages function.
@@ -241,16 +224,16 @@ func (s *Sender) sendMessage(ctx context.Context, message amqpCompatibleMessage)
 
 func createMessageSpan(ctx context.Context, tracer tracing.Tracer, sendOrScheduleSpan tracing.Span, message *amqp.Message) {
 	// derive a new context to be used for creation spans
-	creationCtx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx, endSpan := tracing.StartSpan(creationCtx, &tracing.StartSpanOptions{
+	ctx, endSpan := tracing.StartSpan(ctx, &tracing.StartSpanOptions{
 		Tracer:        tracer,
 		OperationName: tracing.CreateOperationName,
 		Attributes:    getMessageSpanAttributes(message),
 	})
-	defer endSpan(nil)
-	tracer.Inject(creationCtx, message)
-	sendOrScheduleSpan.AddLink(tracer.LinkFromContext(creationCtx))
+	defer func() { endSpan(nil) }()
+	sendOrScheduleSpan.AddLink(tracer.LinkFromContext(ctx, getMessageIDAttribute(message)...))
+	tracer.Inject(ctx, message)
 }
 
 func (sender *Sender) createSenderLink(ctx context.Context, session amqpwrap.AMQPSession) (amqpwrap.AMQPSenderCloser, amqpwrap.AMQPReceiverCloser, error) {

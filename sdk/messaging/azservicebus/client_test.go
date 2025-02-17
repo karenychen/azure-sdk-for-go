@@ -5,7 +5,6 @@ package azservicebus
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	tracing2 "github.com/Azure/azure-sdk-for-go/sdk/internal/test/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/sas"
@@ -504,8 +504,8 @@ func TestNewClientUnitTests(t *testing.T) {
 		require.False(t, client.tracingProvider.NewTracer("module", "version").Enabled())
 
 		// when tracing provider is set, the tracer is set up with the provider.
-		provider := tracing.NewSpanValidator(t, tracing.SpanMatcher{
-			Name:   fmt.Sprintf("%s %s", "test_span", "queue"),
+		provider := tracing2.NewSpanValidator(t, tracing2.SpanMatcher{
+			Name:   "test_span queue",
 			Status: tracing.SpanStatusUnset,
 			Attributes: []tracing.Attribute{
 				{Key: tracing.MessagingSystem, Value: "servicebus"},

@@ -15,13 +15,12 @@ import (
 // write unit test for matcher.go
 
 func TestNewSpanValidator(t *testing.T) {
-	hostName := "fake.servicebus.windows.net"
 	provider := NewSpanValidator(t, SpanMatcher{
 		Name:   "TestSpan",
-		Kind:   SpanKindProducer,
-		Status: SpanStatusUnset,
-		Attributes: []Attribute{
-			{Key: ServerAddress, Value: hostName},
+		Kind:   tracing.SpanKindClient,
+		Status: tracing.SpanStatusUnset,
+		Attributes: []tracing.Attribute{
+			{Key: "testKey", Value: "testValue"},
 		},
 	})
 	tracer := provider.NewTracer("module", "version")
@@ -29,9 +28,9 @@ func TestNewSpanValidator(t *testing.T) {
 	require.True(t, tracer.Enabled())
 
 	ctx, endSpan := runtime.StartSpan(context.Background(), "TestSpan", tracer, &runtime.StartSpanOptions{
-		Kind: tracing.SpanKindProducer,
-		Attributes: []Attribute{
-			{Key: ServerAddress, Value: hostName},
+		Kind: tracing.SpanKindClient,
+		Attributes: []tracing.Attribute{
+			{Key: "testKey", Value: "testValue"},
 		},
 	})
 	defer func() { endSpan(nil) }()
@@ -41,14 +40,13 @@ func TestNewSpanValidator(t *testing.T) {
 }
 
 func TestMatchingTracerStart(t *testing.T) {
-	hostName := "fake.servicebus.windows.net"
 	matcher := SpanMatcher{
 		Name:   "TestSpan",
-		Kind:   SpanKindProducer,
-		Status: SpanStatusUnset,
-		Attributes: []Attribute{
-			{Key: MessagingSystem, Value: "servicebus"},
-			{Key: ServerAddress, Value: hostName},
+		Kind:   tracing.SpanKindProducer,
+		Status: tracing.SpanStatusUnset,
+		Attributes: []tracing.Attribute{
+			{Key: "testKey1", Value: "testValue1"},
+			{Key: "testKey2", Value: "testValue2"},
 		},
 	}
 	tracer := matchingTracer{
@@ -56,12 +54,12 @@ func TestMatchingTracerStart(t *testing.T) {
 	}
 	ctx := context.Background()
 	// no-op when SpanName doesn't match
-	_, spn := tracer.Start(ctx, "BadSpanName", SpanKindProducer, nil, nil)
+	_, spn := tracer.Start(ctx, "BadSpanName", tracing.SpanKindProducer, nil, nil)
 	require.EqualValues(t, spn, tracing.Span{})
 	// tracks span when SpanName matches
-	_, spn = tracer.Start(ctx, "TestSpan", SpanKindProducer, []Attribute{
-		{Key: MessagingSystem, Value: "servicebus"},
-		{Key: ServerAddress, Value: hostName},
+	_, spn = tracer.Start(ctx, "TestSpan", tracing.SpanKindProducer, []tracing.Attribute{
+		{Key: "testKey1", Value: "testValue1"},
+		{Key: "testKey2", Value: "testValue2"},
 	}, nil)
 	require.NotNil(t, spn)
 	spn.SetAttributes(tracing.Attribute{
@@ -69,6 +67,5 @@ func TestMatchingTracerStart(t *testing.T) {
 		Value: "TestAttributeValue",
 	})
 	spn.AddLink(tracing.Link{})
-	spn.SpanContext()
-	spn.SetStatus(SpanStatusOK, "ok")
+	spn.SetStatus(tracing.SpanStatusOK, "ok")
 }

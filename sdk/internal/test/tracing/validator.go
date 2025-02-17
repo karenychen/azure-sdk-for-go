@@ -16,7 +16,7 @@ type SpanStatus = tracing.SpanStatus
 
 // NewSpanValidator creates a Provider that verifies a span was created that matches the specified SpanMatcher.
 // The returned Provider can be used to create a client with a tracing provider that will validate spans in unit tests.
-func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
+func NewSpanValidator(t *testing.T, matcher SpanMatcher) tracing.Provider {
 	return tracing.NewProvider(func(name, version string) tracing.Tracer {
 		tt := matchingTracer{
 			matcher: matcher,
@@ -35,8 +35,8 @@ func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
 
 		return tracing.NewTracer(func(ctx context.Context, spanName string, options *tracing.SpanOptions) (context.Context, Span) {
 			kind := tracing.SpanKindInternal
-			attrs := []Attribute{}
-			links := []Link{}
+			attrs := []tracing.Attribute{}
+			links := []tracing.Link{}
 			if options != nil {
 				kind = options.Kind
 				attrs = append(attrs, options.Attributes...)
@@ -47,20 +47,24 @@ func NewSpanValidator(t *testing.T, matcher SpanMatcher) Provider {
 			SpanFromContext: func(ctx context.Context) Span {
 				return convertSpan(tt.match)
 			},
-			LinkFromContext: func(ctx context.Context, attrs ...Attribute) Link {
+			LinkFromContext: func(ctx context.Context, attrs ...tracing.Attribute) tracing.Link {
 				return tracing.Link{Attributes: attrs}
 			},
 		})
-	}, nil)
+	}, &tracing.ProviderOptions{
+		NewPropagatorFn: func() tracing.Propagator {
+			
+		}
+	})
 }
 
 // SpanMatcher contains the values to match when a span is created.
 type SpanMatcher struct {
 	Name       string
-	Kind       SpanKind
+	Kind       tracing.SpanKind
 	Status     SpanStatus
-	Attributes []Attribute
-	Links      []Link
+	Attributes []tracing.Attribute
+	Links      []tracing.Link
 }
 
 type matchingTracer struct {
@@ -68,7 +72,7 @@ type matchingTracer struct {
 	match   *span
 }
 
-func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind SpanKind, attrs []Attribute, links []Link) (context.Context, Span) {
+func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind tracing.SpanKind, attrs []tracing.Attribute, links []tracing.Link) (context.Context, Span) {
 	if spanName != mt.matcher.Name {
 		return ctx, Span{}
 	}
@@ -76,7 +80,6 @@ func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind SpanK
 	mt.match = &span{
 		name:  spanName,
 		kind:  kind,
-		spCtx: SpanContext{},
 		attrs: attrs,
 		links: links,
 	}
@@ -87,7 +90,6 @@ func (mt *matchingTracer) Start(ctx context.Context, spanName string, kind SpanK
 func convertSpan(sp *span) Span {
 	return tracing.NewSpan(tracing.SpanImpl{
 		End:           sp.End,
-		SpanContext:   sp.SpanContext,
 		SetStatus:     sp.SetStatus,
 		SetAttributes: sp.SetAttributes,
 		AddLink:       sp.AddLink,
@@ -96,11 +98,10 @@ func convertSpan(sp *span) Span {
 
 type span struct {
 	name   string
-	kind   SpanKind
+	kind   tracing.SpanKind
 	status SpanStatus
-	spCtx  tracing.SpanContext
-	attrs  []Attribute
-	links  []Link
+	attrs  []tracing.Attribute
+	links  []tracing.Link
 	desc   string
 	ended  bool
 }
@@ -109,15 +110,11 @@ func (s *span) End() {
 	s.ended = true
 }
 
-func (s *span) SpanContext() tracing.SpanContext {
-	return s.spCtx
-}
-
-func (s *span) SetAttributes(attrs ...Attribute) {
+func (s *span) SetAttributes(attrs ...tracing.Attribute) {
 	s.attrs = append(s.attrs, attrs...)
 }
 
-func (s *span) AddLink(link Link) {
+func (s *span) AddLink(link tracing.Link) {
 	s.links = append(s.links, link)
 }
 

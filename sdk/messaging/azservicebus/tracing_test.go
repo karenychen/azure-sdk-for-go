@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	tracing2 "github.com/Azure/azure-sdk-for-go/sdk/internal/test/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/tracing"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewTracer(t *testing.T) {
 	hostName := "fake.something"
-	provider := tracing.NewSpanValidator(t, tracing.SpanMatcher{
+	provider := tracing2.NewSpanValidator(t, tracing2.SpanMatcher{
 		Name:   "test_span topic",
 		Status: tracing.SpanStatusUnset,
 		Attributes: []tracing.Attribute{

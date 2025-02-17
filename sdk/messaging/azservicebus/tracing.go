@@ -28,15 +28,18 @@ func getFullyQualifiedNamespace(creds clientCreds) string {
 	return csp.FullyQualifiedNamespace
 }
 
-func getMessageSpanAttributes(message *amqp.Message) []tracing.Attribute {
+func getMessageIDAttribute(message *amqp.Message) []tracing.Attribute {
 	var attrs []tracing.Attribute
-	if message != nil && message.Properties != nil {
-		if message.Properties.MessageID != nil && message.Properties.MessageID != "" {
-			attrs = append(attrs, tracing.Attribute{Key: tracing.MessageID, Value: message.Properties.MessageID})
-		}
-		if message.Properties.CorrelationID != nil {
-			attrs = append(attrs, tracing.Attribute{Key: tracing.ConversationID, Value: message.Properties.CorrelationID})
-		}
+	if message != nil && message.Properties != nil && message.Properties.MessageID != nil {
+		attrs = append(attrs, tracing.Attribute{Key: tracing.MessageID, Value: message.Properties.MessageID})
+	}
+	return attrs
+}
+
+func getMessageSpanAttributes(message *amqp.Message) []tracing.Attribute {
+	attrs := getMessageIDAttribute(message)
+	if message != nil && message.Properties != nil && message.Properties.CorrelationID != nil {
+		attrs = append(attrs, tracing.Attribute{Key: tracing.ConversationID, Value: message.Properties.CorrelationID})
 	}
 	return attrs
 }
