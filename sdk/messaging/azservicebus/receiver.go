@@ -245,7 +245,7 @@ func (r *Receiver) ReceiveDeferredMessages(ctx context.Context, sequenceNumbers 
 		}
 
 		return nil
-	}, r.retryOptions, &tracing.StartSpanOptions{OperationName: tracing.ReceiveDeferredOperationName})
+	}, r.retryOptions, &tracing.StartSpanOptions{Tracer: r.tracer, OperationName: tracing.ReceiveDeferredOperationName})
 
 	return receivedMessages, internal.TransformError(err)
 }
@@ -301,7 +301,7 @@ func (r *Receiver) PeekMessages(ctx context.Context, maxMessageCount int, option
 		}
 
 		return nil
-	}, r.retryOptions, &tracing.StartSpanOptions{OperationName: tracing.PeekOperationName})
+	}, r.retryOptions, &tracing.StartSpanOptions{Tracer: r.tracer, OperationName: tracing.PeekOperationName})
 
 	return receivedMessages, internal.TransformError(err)
 }
@@ -326,6 +326,7 @@ func (r *Receiver) RenewMessageLock(ctx context.Context, msg *ReceivedMessage, o
 		msg.LockedUntil = &newExpirationTime[0]
 		return nil
 	}, r.retryOptions, &tracing.StartSpanOptions{
+		Tracer:        r.tracer,
 		OperationName: tracing.RenewMessageLockOperationName,
 		Attributes:    getReceivedMessageSpanAttributes(msg),
 	})

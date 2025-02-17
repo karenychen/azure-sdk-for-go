@@ -131,7 +131,7 @@ func getSpanKind(operationType MessagingOperationType, attrs []Attribute) SpanKi
 	case ReceiveOperationType:
 		return SpanKindClient
 	case SettleOperationType:
-		return SpanKindClient
+		return SpanKindConsumer
 	default:
 		return SpanKindInternal
 	}

@@ -79,7 +79,7 @@ func TestSender_UserFacingError(t *testing.T) {
 	require.Equal(t, CodeConnectionLost, asSBError.Code)
 }
 
-func TestSender_Tracing(t *testing.T) {
+func TestSender_TracingUserFacingError(t *testing.T) {
 	_, client, cleanup := newClientWithMockedConn(t, &emulation.MockDataOptions{
 		PreReceiverMock: func(mr *emulation.MockReceiver, ctx context.Context) error {
 			if mr.Source != "$cbs" {
