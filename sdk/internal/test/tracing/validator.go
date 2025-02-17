@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
+	"github.com/Azure/azure-sdk-for-go/sdk/tracing/azotel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,9 +53,10 @@ func NewSpanValidator(t *testing.T, matcher SpanMatcher) tracing.Provider {
 			},
 		})
 	}, &tracing.ProviderOptions{
+		// use the wrapped propagation.TraceContext propagator
 		NewPropagatorFn: func() tracing.Propagator {
-			
-		}
+			return azotel.NewTracingProvider(nil, nil).NewPropagator()
+		},
 	})
 }
 
