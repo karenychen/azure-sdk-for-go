@@ -24,6 +24,7 @@ func TestNewTracer(t *testing.T) {
 			{Key: tracing.ServerAddress, Value: hostName},
 			{Key: tracing.DestinationName, Value: "topic"},
 			{Key: tracing.SubscriptionName, Value: "subscription"},
+			{Key: tracing.OperationName, Value: "test_span"},
 		},
 	})
 	tracer := newTracer(provider, clientCreds{fullyQualifiedNamespace: hostName}, "topic", "subscription")
