@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -15,8 +16,15 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/test"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/utils"
+	"github.com/Azure/azure-sdk-for-go/sdk/tracing/azotel"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	otelsdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
+
+var oTelTP *otelsdk.TracerProvider
 
 func enableDebugClientOptions(t *testing.T, baseClientOptions *ClientOptions) (*ClientOptions, func()) {
 	// Setting this variable will cause the SB client to dump out (in TESTS ONLY)
@@ -76,6 +84,7 @@ func setupLiveTest(t *testing.T, options *liveTestOptions) (*Client, func(), str
 		// it's basically zero cost since all the links and connection are gone from the
 		// first Close().
 		require.NoError(t, serviceBusClient.Close(context.Background()))
+		require.NoError(t, oTelTP.Shutdown(context.Background()))
 	}
 
 	return serviceBusClient, testCleanup, queueName
@@ -109,6 +118,7 @@ func setupLiveTestWithSubscription(t *testing.T, options *liveTestOptionsWithSub
 		// it's basically zero cost since all the links and connection are gone from the
 		// first Close().
 		require.NoError(t, serviceBusClient.Close(context.Background()))
+		require.NoError(t, oTelTP.Shutdown(context.Background()))
 	}
 
 	return serviceBusClient, testCleanup, topic, "sub"
@@ -236,6 +246,30 @@ func requireScheduledMessageDisappears(ctx context.Context, t *testing.T, receiv
 }
 
 func newServiceBusClientForTest(t *testing.T, options *test.NewClientOptions[ClientOptions]) *Client {
+	if options == nil {
+		options = &test.NewClientOptions[ClientOptions]{}
+	}
+	if options.ClientOptions == nil {
+		options.ClientOptions = &ClientOptions{}
+	}
+	if !options.ClientOptions.TracingProvider.NewTracer("", "").Enabled() {
+		if oTelTP == nil {
+			exp, err := otlptracehttp.New(context.Background(), otlptracehttp.WithEndpointURL("http://localhost:4318/v1/traces"))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// create an OTel TracerProvider that uses the OTLP exporter
+			oTelTP = otelsdk.NewTracerProvider(
+				otelsdk.WithBatcher(exp),
+				otelsdk.WithResource(resource.NewWithAttributes(
+					semconv.SchemaURL,
+					semconv.ServiceNameKey.String(fmt.Sprintf("azservicebus-%s", time.Now().Format("2006-01-02T15:04:05")))),
+				))
+		}
+		options.ClientOptions.TracingProvider = azotel.NewTracingProvider(oTelTP, nil)
+	}
+
 	return test.NewClient(t, test.NewClientArgs[ClientOptions, Client]{
 		NewClientFromConnectionString: NewClientFromConnectionString, // allowed connection string
 		NewClient:                     NewClient,

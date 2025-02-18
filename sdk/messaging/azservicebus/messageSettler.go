@@ -39,6 +39,10 @@ func (s *messageSettler) settleWithRetries(ctx context.Context, settleFn func(re
 		return internal.NewErrNonRetriable("messages that are received in `ReceiveModeReceiveAndDelete` mode are not settleable")
 	}
 
+	if to != nil {
+		to.Tracer = s.tracer
+	}
+
 	err := s.links.Retry(ctx, EventReceiver, "settle", func(ctx context.Context, lwid *internal.LinksWithID, args *utils.RetryFnArgs) error {
 		if err := settleFn(lwid.Receiver, lwid.RPC); err != nil {
 			return err
@@ -76,7 +80,6 @@ func (ms *messageSettler) CompleteMessage(ctx context.Context, message *Received
 
 		return err
 	}, &tracing.StartSpanOptions{
-		Tracer:        ms.tracer,
 		OperationName: tracing.CompleteOperationName,
 		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
@@ -132,7 +135,6 @@ func (ms *messageSettler) AbandonMessage(ctx context.Context, message *ReceivedM
 
 		return err
 	}, &tracing.StartSpanOptions{
-		Tracer:        ms.tracer,
 		OperationName: tracing.AbandonOperationName,
 		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
@@ -188,7 +190,6 @@ func (ms *messageSettler) DeferMessage(ctx context.Context, message *ReceivedMes
 
 		return err
 	}, &tracing.StartSpanOptions{
-		Tracer:        ms.tracer,
 		OperationName: tracing.DeferOperationName,
 		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
@@ -272,7 +273,6 @@ func (ms *messageSettler) DeadLetterMessage(ctx context.Context, message *Receiv
 
 		return err
 	}, &tracing.StartSpanOptions{
-		Tracer:        ms.tracer,
 		OperationName: tracing.DeadLetterOperationName,
 		Attributes:    getReceivedMessageSpanAttributes(message),
 	})
