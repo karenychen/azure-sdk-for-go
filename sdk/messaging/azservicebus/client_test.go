@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	tracing2 "github.com/Azure/azure-sdk-for-go/sdk/internal/test/tracing"
+	testtracing "github.com/Azure/azure-sdk-for-go/sdk/internal/test/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/sas"
@@ -500,16 +500,18 @@ func TestNewClientUnitTests(t *testing.T) {
 		// when tracing provider is not set, use a no-op tracer.
 		client, err := NewClient(hostName, struct{ azcore.TokenCredential }{}, nil)
 		require.NoError(t, err)
-		require.NotZero(t, client.tracingProvider)
+		require.Zero(t, client.tracingProvider)
 		require.False(t, client.tracingProvider.NewTracer("module", "version").Enabled())
 
 		// when tracing provider is set, the tracer is set up with the provider.
-		provider := tracing2.NewSpanValidator(t, tracing2.SpanMatcher{
+		provider := testtracing.NewSpanValidator(t, testtracing.SpanMatcher{
 			Name:   "test_span queue",
 			Status: tracing.SpanStatusUnset,
 			Attributes: []tracing.Attribute{
 				{Key: tracing.MessagingSystem, Value: "servicebus"},
 				{Key: tracing.ServerAddress, Value: hostName},
+				{Key: tracing.DestinationName, Value: "queue"},
+				{Key: tracing.OperationName, Value: "test_span"},
 			},
 		})
 		client, err = NewClient(hostName, struct{ azcore.TokenCredential }{}, &ClientOptions{
@@ -517,8 +519,9 @@ func TestNewClientUnitTests(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotZero(t, client.tracingProvider)
-		require.True(t, client.tracingProvider.NewTracer("module", "version").Enabled())
-		tracer := newTracer(provider, client.creds, "queue", "")
+		sender, err := client.NewSender("queue", nil)
+		require.NoError(t, err)
+		tracer := sender.tracer
 
 		// ensure attributes are set up correctly.
 		_, endSpan := tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
@@ -534,8 +537,9 @@ func TestNewClientUnitTests(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.NotZero(t, client.tracingProvider)
-		require.True(t, client.tracingProvider.NewTracer("module", "version").Enabled())
-		tracer = newTracer(provider, client.creds, "queue", "")
+		sender, err = client.NewSender("queue", nil)
+		require.NoError(t, err)
+		tracer = sender.tracer
 
 		// ensure attributes are set up correctly.
 		_, endSpan = tracing.StartSpan(context.Background(), &tracing.StartSpanOptions{
