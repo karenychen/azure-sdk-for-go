@@ -5,6 +5,7 @@ package tracing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
@@ -32,6 +33,7 @@ type StartSpanOptions struct {
 	Tracer        Tracer
 	OperationName MessagingOperationName
 	Attributes    []Attribute
+	Links         []Link
 }
 
 func NewTracer(provider Provider, moduleName, version, hostName, queueOrTopic, subscription string) Tracer {
@@ -40,13 +42,13 @@ func NewTracer(provider Provider, moduleName, version, hostName, queueOrTopic, s
 		propagator:  provider.NewPropagator(),
 		destination: queueOrTopic,
 	}
-	t.tracer.SetAttributes(Attribute{Key: MessagingSystem, Value: messagingSystemName},
-		Attribute{Key: DestinationName, Value: queueOrTopic})
+	t.tracer.SetAttributes(Attribute{Key: AttrMessagingSystem, Value: messagingSystemName},
+		Attribute{Key: AttrDestinationName, Value: queueOrTopic})
 	if hostName != "" {
-		t.tracer.SetAttributes(Attribute{Key: ServerAddress, Value: hostName})
+		t.tracer.SetAttributes(Attribute{Key: AttrServerAddress, Value: hostName})
 	}
 	if subscription != "" {
-		t.tracer.SetAttributes(Attribute{Key: SubscriptionName, Value: subscription})
+		t.tracer.SetAttributes(Attribute{Key: AttrSubscriptionName, Value: subscription})
 	}
 	return t
 }
@@ -59,38 +61,36 @@ func (t *Tracer) LinkFromContext(ctx context.Context, attrs ...Attribute) Link {
 	return t.tracer.LinkFromContext(ctx, attrs...)
 }
 
-func (t *Tracer) addLinkToMessage(ctx context.Context, message *amqp.Message) {
-	sp := t.SpanFromContext(ctx)
-	sp.AddLink(t.LinkFromContext(t.Extract(context.Background(), message),
-		tracing.Attribute{Key: MessageID, Value: message.Properties.MessageID}))
-}
-
 func (t *Tracer) Inject(ctx context.Context, message *amqp.Message) {
-	t.propagator.Inject(ctx, messageCarrierAdapter(message))
+	if message == nil {
+		return
+	}
+	t.propagator.Inject(ctx, messageCarrierAdapter(*message))
 }
 
 func (t *Tracer) Extract(ctx context.Context, message *amqp.Message) context.Context {
-	if message != nil {
-		ctx = t.propagator.Extract(ctx, messageCarrierAdapter(message))
+	if message == nil {
+		return ctx
 	}
-	return ctx
+	return t.propagator.Extract(ctx, messageCarrierAdapter(*message))
 }
 
 func StartSpan(ctx context.Context, options *StartSpanOptions) (context.Context, func(error)) {
 	if options == nil || options.OperationName == "" {
 		return ctx, func(error) {}
 	}
-	attrs := append(options.Attributes, Attribute{Key: OperationName, Value: string(options.OperationName)})
+	attrs := options.Attributes
+	attrs = append(attrs, Attribute{Key: AttrOperationName, Value: string(options.OperationName)})
 
 	operationType := getOperationType(options.OperationName)
 	if operationType != "" {
-		attrs = append(attrs, Attribute{Key: OperationType, Value: string(operationType)})
+		attrs = append(attrs, Attribute{Key: AttrOperationType, Value: string(operationType)})
 	}
 	if operationType == SettleOperationType {
-		attrs = append(attrs, Attribute{Key: DispositionStatus, Value: string(options.OperationName)})
+		attrs = append(attrs, Attribute{Key: AttrDispositionStatus, Value: string(options.OperationName)})
 	}
 
-	spanKind := getSpanKind(operationType, options.Attributes)
+	spanKind := getSpanKind(operationType, options.OperationName, options.Attributes)
 
 	tr := options.Tracer
 	spanName := string(options.OperationName)
@@ -98,11 +98,20 @@ func StartSpan(ctx context.Context, options *StartSpanOptions) (context.Context,
 		spanName = fmt.Sprintf("%s %s", options.OperationName, tr.destination)
 	}
 
-	return runtime.StartSpan(ctx, spanName, tr.tracer,
+	ctx, endSpan := runtime.StartSpan(ctx, spanName, tr.tracer,
 		&runtime.StartSpanOptions{
 			Kind:       spanKind,
 			Attributes: attrs,
+			Links:      options.Links,
 		})
+	return ctx, func(err error) {
+		// unwrap any errors from upstream
+		if unwrappedErr := errors.Unwrap(err); unwrappedErr != nil {
+			endSpan(unwrappedErr)
+			return
+		}
+		endSpan(err)
+	}
 }
 
 func getOperationType(operationName MessagingOperationName) MessagingOperationType {
@@ -111,8 +120,7 @@ func getOperationType(operationName MessagingOperationName) MessagingOperationTy
 		return CreateOperationType
 	case SendOperationName, ScheduleOperationName, CancelScheduledOperationName:
 		return SendOperationType
-	case ReceiveOperationName, PeekOperationName, ReceiveDeferredOperationName, RenewMessageLockOperationName,
-		AcceptSessionOperationName, GetSessionStateOperationName, SetSessionStateOperationName, RenewSessionLockOperationName:
+	case ReceiveOperationName, PeekOperationName, ReceiveDeferredOperationName, RenewMessageLockOperationName:
 		return ReceiveOperationType
 	case AbandonOperationName, CompleteOperationName, DeferOperationName, DeadLetterOperationName:
 		return SettleOperationType
@@ -121,23 +129,27 @@ func getOperationType(operationName MessagingOperationName) MessagingOperationTy
 	}
 }
 
-func getSpanKind(operationType MessagingOperationType, attrs []Attribute) SpanKind {
-	switch operationType {
-	case CreateOperationType:
-		return SpanKindProducer
-	case SendOperationType:
-		// return client span if it is a batch operation
-		// otherwise return producer span
-		for _, attr := range attrs {
-			if attr.Key == BatchMessageCount {
-				return SpanKindClient
-			}
+// getSpanKind determines the span kind based on the operation type and name.
+// based on the messaging span conventions https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/#span-kind
+func getSpanKind(operationType MessagingOperationType, operationName MessagingOperationName, attrs []Attribute) SpanKind {
+	isBatch := false
+	for _, attr := range attrs {
+		if attr.Key == AttrBatchMessageCount {
+			isBatch = true
 		}
+	}
+	switch {
+	case operationType == CreateOperationType,
+		operationType == SendOperationType && !isBatch:
 		return SpanKindProducer
-	case ReceiveOperationType:
+	case operationType == SendOperationType,
+		operationType == ReceiveOperationType,
+		operationType == SettleOperationType,
+		operationName == AcceptSessionOperationName,
+		operationName == SetSessionStateOperationName,
+		operationName == GetSessionStateOperationName,
+		operationName == RenewSessionLockOperationName:
 		return SpanKindClient
-	case SettleOperationType:
-		return SpanKindConsumer
 	default:
 		return SpanKindInternal
 	}

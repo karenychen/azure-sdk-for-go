@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/amqpwrap"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/conn"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/tracing"
 )
@@ -59,8 +60,7 @@ type ClientOptions struct {
 	// For an example, see ExampleNewClient_usingWebsockets() function in example_client_test.go.
 	NewWebSocketConn func(ctx context.Context, args NewWebSocketConnArgs) (net.Conn, error)
 
-	// TracingProvider configures the tracing provider.
-	// It defaults to a no-op provider
+	// TracingProvider sets the tracing provider for the Client.
 	TracingProvider tracing.Provider
 
 	// RetryOptions controls how often operations are retried from this client and any
@@ -190,7 +190,7 @@ func newClientImpl(creds clientCreds, args clientImplArgs) (*Client, error) {
 func (client *Client) NewReceiverForQueue(queueName string, options *ReceiverOptions) (*Receiver, error) {
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	receiver, err := newReceiver(newReceiverArgs{
-		tracer:              newTracer(client.tracingProvider, client.creds, queueName, ""),
+		tracer:              client.newTracer(queueName, ""),
 		cleanupOnClose:      cleanupOnClose,
 		ns:                  client.namespace,
 		entity:              entity{Queue: queueName},
@@ -210,7 +210,7 @@ func (client *Client) NewReceiverForQueue(queueName string, options *ReceiverOpt
 func (client *Client) NewReceiverForSubscription(topicName string, subscriptionName string, options *ReceiverOptions) (*Receiver, error) {
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	receiver, err := newReceiver(newReceiverArgs{
-		tracer:              newTracer(client.tracingProvider, client.creds, topicName, subscriptionName),
+		tracer:              client.newTracer(topicName, subscriptionName),
 		cleanupOnClose:      cleanupOnClose,
 		ns:                  client.namespace,
 		entity:              entity{Topic: topicName, Subscription: subscriptionName},
@@ -235,7 +235,7 @@ type NewSenderOptions struct {
 func (client *Client) NewSender(queueOrTopic string, options *NewSenderOptions) (*Sender, error) {
 	id, cleanupOnClose := client.getCleanupForCloseable()
 	sender, err := newSender(newSenderArgs{
-		tracer:         newTracer(client.tracingProvider, client.creds, queueOrTopic, ""),
+		tracer:         client.newTracer(queueOrTopic, ""),
 		ns:             client.namespace,
 		queueOrTopic:   queueOrTopic,
 		cleanupOnClose: cleanupOnClose,
@@ -258,7 +258,7 @@ func (client *Client) AcceptSessionForQueue(ctx context.Context, queueName strin
 	sessionReceiver, err := newSessionReceiver(
 		ctx,
 		newSessionReceiverArgs{
-			tracer:         newTracer(client.tracingProvider, client.creds, queueName, ""),
+			tracer:         client.newTracer(queueName, ""),
 			sessionID:      &sessionID,
 			ns:             client.namespace,
 			entity:         entity{Queue: queueName},
@@ -286,7 +286,7 @@ func (client *Client) AcceptSessionForSubscription(ctx context.Context, topicNam
 	sessionReceiver, err := newSessionReceiver(
 		ctx,
 		newSessionReceiverArgs{
-			tracer:         newTracer(client.tracingProvider, client.creds, topicName, subscriptionName),
+			tracer:         client.newTracer(topicName, subscriptionName),
 			sessionID:      &sessionID,
 			ns:             client.namespace,
 			entity:         entity{Topic: topicName, Subscription: subscriptionName},
@@ -356,7 +356,7 @@ func (client *Client) acceptNextSessionForEntity(ctx context.Context, entity ent
 	sessionReceiver, err := newSessionReceiver(
 		ctx,
 		newSessionReceiverArgs{
-			tracer:            newTracer(client.tracingProvider, client.creds, entity.Topic, entity.Subscription),
+			tracer:            client.newTracer(entity.Topic, entity.Subscription),
 			sessionID:         nil,
 			ns:                client.namespace,
 			entity:            entity,
@@ -391,4 +391,16 @@ func (client *Client) getCleanupForCloseable() (uint64, func()) {
 		delete(client.links, id)
 		client.linksMu.Unlock()
 	}
+}
+
+func (client *Client) newTracer(queueOrTopic, subscription string) tracing.Tracer {
+	var namespaceName string
+	if client.creds.fullyQualifiedNamespace != "" {
+		namespaceName = client.creds.fullyQualifiedNamespace
+	}
+	csp, err := conn.ParseConnectionString(client.creds.connectionString)
+	if err == nil {
+		namespaceName = csp.FullyQualifiedNamespace
+	}
+	return tracing.NewTracer(client.tracingProvider, internal.ModuleName, internal.Version, namespaceName, queueOrTopic, subscription)
 }

@@ -94,24 +94,16 @@ type SendMessageBatchOptions struct {
 // SendMessageBatch sends a MessageBatch to a queue or topic.
 // Message batches can be created using [Sender.NewMessageBatch].
 // If the operation fails it can return an [*azservicebus.Error] type if the failure is actionable.
-func (s *Sender) SendMessageBatch(ctx context.Context, batch *MessageBatch, options *SendMessageBatchOptions) error {
-	var err error
-	sendCtx, endSpan := tracing.StartSpan(ctx, &tracing.StartSpanOptions{
-		Tracer:        s.tracer,
-		OperationName: tracing.SendOperationName,
-		Attributes:    getMessageBatchSpanAttributes(int(batch.NumMessages())),
-	})
-	defer func() { endSpan(err) }()
-	sendSpan := s.tracer.SpanFromContext(sendCtx)
-
-	err = batch.injectCreationCtx(ctx, s.tracer, sendSpan)
-	if err != nil {
-		return internal.TransformError(err)
-	}
-
+func (s *Sender) SendMessageBatch(ctx context.Context, batch *MessageBatch, options *SendMessageBatchOptions) (err error) {
+	// We start a trace span for the send operation, but do not start a creation span for each message.
+	// This needs to be done through a future fix to enable injecting context when we add to the MessageBatch.
 	err = s.links.Retry(ctx, EventSender, "SendMessageBatch", func(ctx context.Context, lwid *internal.LinksWithID, args *utils.RetryFnArgs) error {
 		return lwid.Sender.Send(ctx, batch.toAMQPMessage(), nil)
-	}, s.retryOptions, nil)
+	}, s.retryOptions, &tracing.StartSpanOptions{
+		Tracer:        s.tracer,
+		OperationName: tracing.SendOperationName,
+		Attributes:    tracing.GetMessageBatchSpanAttributes(int(batch.NumMessages())),
+	})
 
 	return internal.TransformError(err)
 }
@@ -149,7 +141,7 @@ func scheduleMessages[T amqpCompatibleMessage](ctx context.Context, tracer traci
 	scheduleCtx, endSpan := tracing.StartSpan(ctx, &tracing.StartSpanOptions{
 		Tracer:        tracer,
 		OperationName: tracing.ScheduleOperationName,
-		Attributes:    getMessageBatchSpanAttributes(len(messages)),
+		Attributes:    tracing.GetMessageBatchSpanAttributes(len(messages)),
 	})
 	defer func() { endSpan(err) }()
 	scheduleSpan := tracer.SpanFromContext(scheduleCtx)
@@ -192,7 +184,7 @@ func (s *Sender) CancelScheduledMessages(ctx context.Context, sequenceNumbers []
 	}, s.retryOptions, &tracing.StartSpanOptions{
 		Tracer:        s.tracer,
 		OperationName: tracing.CancelScheduledOperationName,
-		Attributes:    getMessageBatchSpanAttributes(len(sequenceNumbers)),
+		Attributes:    tracing.GetMessageBatchSpanAttributes(len(sequenceNumbers)),
 	})
 
 	return internal.TransformError(err)
@@ -212,7 +204,7 @@ func (s *Sender) sendMessage(ctx context.Context, message amqpCompatibleMessage)
 	}, RetryOptions(s.retryOptions), &tracing.StartSpanOptions{
 		Tracer:        s.tracer,
 		OperationName: tracing.SendOperationName,
-		Attributes:    getMessageSpanAttributes(message.toAMQPMessage()),
+		Attributes:    tracing.GetMessageSpanAttributes(message.toAMQPMessage()),
 	})
 
 	if amqpErr := (*amqp.Error)(nil); errors.As(err, &amqpErr) && amqpErr.Condition == amqp.ErrCondMessageSizeExceeded {
@@ -229,10 +221,10 @@ func createMessageSpan(ctx context.Context, tracer tracing.Tracer, sendOrSchedul
 	ctx, endSpan := tracing.StartSpan(ctx, &tracing.StartSpanOptions{
 		Tracer:        tracer,
 		OperationName: tracing.CreateOperationName,
-		Attributes:    getMessageSpanAttributes(message),
+		Attributes:    tracing.GetMessageSpanAttributes(message),
 	})
 	defer func() { endSpan(nil) }()
-	sendOrScheduleSpan.AddLink(tracer.LinkFromContext(ctx, getMessageIDAttribute(message)...))
+	sendOrScheduleSpan.AddLink(tracer.LinkFromContext(ctx, tracing.GetMessageIDAttribute(message)...))
 	tracer.Inject(ctx, message)
 }
 
